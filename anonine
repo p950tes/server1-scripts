@@ -1,0 +1,23 @@
+#!/bin/bash
+
+case "$1" in
+	start)
+		echo "Starting openvpn anonine service..."
+		cmd="sudo /etc/init.d/openvpn start anonine"
+		$cmd
+		;;
+	stop)
+		echo "Stopping openvpn anonine service..."
+		cmd="sudo /etc/init.d/openvpn stop"
+		$cmd
+		;;
+	*)
+		echo "Invalid parameter"
+		exit 2
+		;;
+esac
+log=/var/log/openvpn.log
+sleep 1
+echo "tail $log:"
+tail -n 50 $log | grep $(date +%H:%M)
+exit 0

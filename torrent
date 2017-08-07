@@ -1,0 +1,71 @@
+#!/bin/bash
+
+CONFIG_DIR="/etc/transmission-daemon"
+LOGFILE="/var/log/transmission-daemon.log"
+NAME="transmission-daemon"
+SERVICE_CMD="/etc/init.d/transmission-daemon"
+
+REMOTE="transmission-remote"
+CALLER=$(ps -o comm= $PPID)
+CALLER_ARGS=$(ps -o args= $PPID)
+
+function log {
+	echo -e "[$(date +'%F %T')] $@" | tee -a ${LOGFILE}
+}
+
+case "$1" in 
+	start)
+		if [ $(pidof $NAME) ]; then
+			log "[$CALLER] Trying to initiate transmission-daemon, but it is already running. Caller cmd: [$CALLER_ARGS]"
+		else
+			log "[$CALLER] Initiating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
+			
+			if ! res=$(sudo $SERVICE_CMD start); then
+				log "Initialisation failed. Error: \n$res"
+			fi
+			#$NAME --config-dir ${CONFIG_DIR} --log-error --logfile ${LOGFILE}
+		fi
+		;;
+	stop)
+		log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
+		if ! res=$(sudo $SERVICE_CMD stop); then
+			log "Termination failed. Error: \n$res"
+		fi
+		;;
+	addtracker)
+		if [ -z "$2" ]; then
+			echo "Please specify trackers"
+			exit 1
+		fi
+		if [[ $2 == "--torrent" ]]; then
+			torrentarg=$3
+			shift 2
+		fi
+		trackers=$2
+		torrents=$($REMOTE -l | sed '1d;$d')
+		
+		if [ -n "$torrentarg" ]; then
+			torrents=$(echo "$torrents" | grep -i "$torrentarg" | awk '{print $1}')
+		else
+			torrents=$(echo "$torrents" | awk '{print $1}')
+		fi
+
+		echo "$torrents" | while read torrent; do
+			for tracker in $trackers; do
+				if [ -n "$tracker" ]; then
+					result=$($REMOTE -t $torrent -td $tracker)
+#					if [ $? -eq 0 ]; then
+						echo "$torrent: $tracker: $result"
+#					fi
+				fi
+			done
+		done
+		;;
+	*)
+		echo "Invalid parameter"
+		exit 2
+		;;
+esac
+
+exit 0
+
