@@ -1,11 +1,11 @@
 #! /bin/bash
 
-DATADISK="/mnt/data-disk"
+DATADISK="/"
 BACKUPDISK="/mnt/backup-disk"
 
-SRC="${DATADISK}/"
-DEST="${BACKUPDISK}/backup/data-disk/"
-EXCLUDE_FILE="/etc/backup-custom/exclude-data"
+SRC="${DATADISK}"
+DEST="${BACKUPDISK}/backup/system/"
+EXCLUDE_FILE="/etc/backup-custom/exclude-system"
 ON_SUCCESS_UNMOUNT_BACKUP=true
 CRON=false
 MODIFIERS="--archive --verbose --human-readable --delete-delay --exclude-from ${EXCLUDE_FILE}"
