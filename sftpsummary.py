@@ -59,7 +59,7 @@ class Session:
     def createSummary(self):
         result =  "%s [%s] %s - %s\n" % (self.user, self.id, self.start, self.end)
         for action in self.userActions:
-            result += "[" + action.time + "] " + action.type + " [" + action.details + "]\n"
+            result += action.time + "|" + action.type + "|" + action.details + "|!\n"
         return result
 
 class UserAction:
