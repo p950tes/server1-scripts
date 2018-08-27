@@ -12,6 +12,13 @@ CALLER_ARGS=$(ps -o args= $PPID)
 function log {
 	echo -e "[$(date +'%F %T')] $@" | tee -a ${LOGFILE}
 }
+function isRoot {
+	return $(test "$EUID" -eq 0)
+}
+if ! isRoot; then
+   echo "Error: root permissions are required" 1>&2
+   exit 1
+fi
 
 case "$1" in 
 	start)
@@ -20,7 +27,7 @@ case "$1" in
 		else
 			log "[$CALLER] Initiating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
 			
-			if ! res=$(sudo $SERVICE_CMD start); then
+			if ! res=$($SERVICE_CMD start); then
 				log "Initialisation failed. Error: \n$res"
 			fi
 			#$NAME --config-dir ${CONFIG_DIR} --log-error --logfile ${LOGFILE}
@@ -28,7 +35,7 @@ case "$1" in
 		;;
 	stop)
 		log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
-		if ! res=$(sudo $SERVICE_CMD stop); then
+		if ! res=$($SERVICE_CMD stop); then
 			log "Termination failed. Error: \n$res"
 		fi
 		;;
@@ -36,6 +43,7 @@ case "$1" in
 		if [ -z "$2" ]; then
 			echo "Please specify trackers"
 			exit 1
+		
 		fi
 		if [[ $2 == "--torrent" ]]; then
 			torrentarg=$3
