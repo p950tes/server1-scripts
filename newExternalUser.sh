@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Set the script to exit on error
+set -e
+
 user=${1}
 
 while [ -z "$user" ]; do
