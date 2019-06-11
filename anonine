@@ -1,5 +1,24 @@
 #!/bin/bash
 
+function ensureTransmissionIsNotRunning {
+	process=$(pgrep -a transmission)
+	
+	if [ -n "$process" ]; then
+		echo "WARNING: transmission is still running!"
+		echo "$process"
+		cmd="killall transmission-daemon"
+		echo "Attempting to kill..."
+		echo "$cmd"
+		$cmd
+		sleep 1
+		if pgrep -a transmission; then
+			echo "The bastard is still alive, please investigate"
+		else
+			echo "Kill successful"
+		fi
+	fi
+}
+
 case "$1" in
 	start)
 		echo "Starting openvpn anonine service..."
@@ -10,6 +29,7 @@ case "$1" in
 		echo "Stopping openvpn anonine service..."
 		cmd="sudo /etc/init.d/openvpn stop"
 		$cmd
+		ensureTransmissionIsNotRunning
 		;;
 	*)
 		echo "Invalid parameter"
