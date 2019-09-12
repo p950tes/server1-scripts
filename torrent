@@ -15,59 +15,104 @@ function log {
 function isRoot {
 	return $(test "$EUID" -eq 0)
 }
+
 if ! isRoot; then
-   echo "Error: root permissions are required" 1>&2
-   exit 1
+	echo "Error: root permissions are required" 1>&2
+	exit 1
 fi
+
+function isRunning {
+	pidof $NAME > /dev/null && echo true || echo false 
+}
+
+function startApp {
+	if $(isRunning); then
+		log "[$CALLER] Trying to initiate transmission-daemon, but it is already running. Caller cmd: [$CALLER_ARGS]"
+	else
+		log "[$CALLER] Initiating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
+
+		if ! res=$($SERVICE_CMD start); then
+			log "Initialisation failed. Error: \n$res"
+		fi
+		#$NAME --config-dir ${CONFIG_DIR} --log-error --logfile ${LOGFILE}
+	fi
+}
+function stopApp {
+	log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
+	if res=$($SERVICE_CMD stop); then
+		# Give it a second to terminate properly
+		sleep 1 
+		validateTermination
+	else
+		log "Termination failed. Error: \n$res"
+	fi
+}
+
+function validateTermination {
+	process=$(pgrep -a transmission)
+	if [ -n "$process" ]; then
+		echo "WARNING: transmission is still running!"
+		echo "$process"
+		cmd="killall transmission-daemon"
+		echo "Attempting to kill..."
+		echo "$cmd"
+		$cmd
+		sleep 1
+		if $(isRunning); then
+			echo "The bastard is still alive, please investigate"
+		else
+			echo "Kill successful"
+		fi
+	fi
+
+}
+
+function getTorrents {
+	torrentarg=$1
+	torrents=$($REMOTE -l | sed '1d;$d')
+
+	if [ -n "$torrentarg" ]; then
+		echo "$torrents" | grep -i "$torrentarg" | awk '{print $1}'
+	else
+		echo "$torrents" | awk '{print $1}'
+	fi
+}
+
+function addTrackers {
+	trackers=$1
+	torrents=$2
+
+	echo "$torrents" | while read torrent; do
+		for tracker in $trackers; do
+			if [ -n "$tracker" ]; then
+				result=$($REMOTE -t $torrent -td $tracker)
+				echo "$torrent: $tracker: $result"
+			fi
+		done
+	done
+}
 
 case "$1" in 
 	start)
-		if [ $(pidof $NAME) ]; then
-			log "[$CALLER] Trying to initiate transmission-daemon, but it is already running. Caller cmd: [$CALLER_ARGS]"
-		else
-			log "[$CALLER] Initiating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
-			
-			if ! res=$($SERVICE_CMD start); then
-				log "Initialisation failed. Error: \n$res"
-			fi
-			#$NAME --config-dir ${CONFIG_DIR} --log-error --logfile ${LOGFILE}
-		fi
+		startApp
 		;;
 	stop)
-		log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
-		if ! res=$($SERVICE_CMD stop); then
-			log "Termination failed. Error: \n$res"
-		fi
+		stopApp
 		;;
 	addtracker)
 		if [ -z "$2" ]; then
 			echo "Please specify trackers"
 			exit 1
-		
 		fi
 		if [[ $2 == "--torrent" ]]; then
 			torrentarg=$3
 			shift 2
 		fi
-		trackers=$2
-		torrents=$($REMOTE -l | sed '1d;$d')
-		
-		if [ -n "$torrentarg" ]; then
-			torrents=$(echo "$torrents" | grep -i "$torrentarg" | awk '{print $1}')
-		else
-			torrents=$(echo "$torrents" | awk '{print $1}')
-		fi
 
-		echo "$torrents" | while read torrent; do
-			for tracker in $trackers; do
-				if [ -n "$tracker" ]; then
-					result=$($REMOTE -t $torrent -td $tracker)
-#					if [ $? -eq 0 ]; then
-						echo "$torrent: $tracker: $result"
-#					fi
-				fi
-			done
-		done
+		trackers=$2
+		torrents=$(getTorrents "$torrentarg")
+
+		addTrackers "$trackers" "$torrents" 
 		;;
 	*)
 		echo "Invalid parameter"
