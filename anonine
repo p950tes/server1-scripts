@@ -1,21 +1,13 @@
 #!/bin/bash
 
 function ensureTransmissionIsNotRunning {
+	sleep 2
 	process=$(pgrep -a transmission)
 	
 	if [ -n "$process" ]; then
-		echo "WARNING: transmission is still running!"
+		echo "WARNING: It seems like transmission is still running. Was down.sh really run?"
 		echo "$process"
-		cmd="killall transmission-daemon"
-		echo "Attempting to kill..."
-		echo "$cmd"
-		$cmd
-		sleep 1
-		if pgrep -a transmission; then
-			echo "The bastard is still alive, please investigate"
-		else
-			echo "Kill successful"
-		fi
+		cmd="sudo /usr/local/bin/torrent stop"
 	fi
 }
 

@@ -39,9 +39,11 @@ function startApp {
 }
 function stopApp {
 	log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
+	log "$SERVICE_CMD stop"
 	if res=$($SERVICE_CMD stop); then
+		log "$res"
 		# Give it a second to terminate properly
-		sleep 1 
+		sleep 5 
 		validateTermination
 	else
 		log "Termination failed. Error: \n$res"
@@ -57,7 +59,7 @@ function validateTermination {
 		echo "Attempting to kill..."
 		echo "$cmd"
 		$cmd
-		sleep 1
+		sleep 5
 		if $(isRunning); then
 			echo "The bastard is still alive, please investigate"
 		else
