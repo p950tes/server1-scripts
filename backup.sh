@@ -9,8 +9,6 @@ EXCLUDE_FILE="/etc/backup-custom/exclude"
 
 ON_SUCCESS_UNMOUNT_BACKUP=true
 
-#MODIFIERS="--archive --verbose --human-readable --delete-delay --progress --exclude-from ${EXCLUDE_FILE}"
-
 function ensureRoot {
 	if [ "$EUID" -ne 0 ]; then
 		echo "Has to be run as root"
@@ -56,6 +54,7 @@ function addModifier {
 }
 function buildBackupCommand {
 	addModifier "--archive"
+	addModifier "--acls"
 	addModifier "--verbose"
 	addModifier "--human-readable"
 	addModifier "--delete-delay"

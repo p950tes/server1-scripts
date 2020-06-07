@@ -20,7 +20,7 @@ function removeLangSuffix {
 function getMovies {
 	getMovieDirs | while read dir; do
 		find "$MOVIESDIR/$dir" -type f -printf "%f\n"
-	done | removeSuffix | sort | uniq
+	done | removeSuffix | removeLangSuffix | sort | uniq
 }
 function getSubtitles {
 	ls "$SUBSDIR" | removeSuffix | removeLangSuffix | sort | uniq
