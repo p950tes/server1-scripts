@@ -16,10 +16,10 @@ function isRoot {
 	return $(test "$EUID" -eq 0)
 }
 
-if ! isRoot; then
-	echo "Error: root permissions are required" 1>&2
-	exit 1
-fi
+#if ! isRoot; then
+#	echo "Error: root permissions are required" 1>&2
+#	exit 1
+#fi
 
 function isRunning {
 	pidof $NAME > /dev/null && echo true || echo false 

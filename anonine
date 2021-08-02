@@ -1,13 +1,14 @@
 #!/bin/bash
 
 function ensureTransmissionIsNotRunning {
-	sleep 2
+	sleep 5
 	process=$(pgrep -a transmission)
 	
 	if [ -n "$process" ]; then
 		echo "WARNING: It seems like transmission is still running. Was down.sh really run?"
 		echo "$process"
 		cmd="sudo /usr/local/bin/torrent stop"
+		$cmd
 	fi
 }
 
