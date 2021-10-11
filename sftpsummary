@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import re
 import subprocess
 import time
+import os
 
 LOGPATH = "/var/log/sftp.log"
 FILTERS = [": opendir ", ": closedir ", ": close "]
@@ -70,6 +71,9 @@ class UserAction:
 
 
 def processLogFile():
+    if not os.path.exists(LOGPATH):
+        return
+
     with open(LOGPATH, "r") as logfile:
         for line in logfile:
             if not ARGS.date or line.startswith(ARGS.date):
@@ -159,15 +163,11 @@ parseArguments()
 processLogFile()
 summary = createSummary()
 
-if sessionsFound():
-    exitCode = 0
-    if ARGS.mail:
-        sendEmail(summary)
-else:
-    exitCode = 1
+if sessionsFound() and ARGS.mail:
+    sendEmail(summary)
 
 if not ARGS.quiet:
     print(summary)
 
-exit(exitCode)
+exit(0)
 
