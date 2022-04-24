@@ -1,126 +1,54 @@
 #!/bin/bash
 
-CONFIG_DIR="/etc/transmission-daemon"
-LOGFILE="/var/log/transmission-daemon.log"
-NAME="transmission-daemon"
-SERVICE_CMD="/etc/init.d/transmission-daemon"
-
 REMOTE="transmission-remote"
-CALLER=$(ps -o comm= $PPID)
-CALLER_ARGS=$(ps -o args= $PPID)
 
-function log {
-	echo -e "[$(date +'%F %T')] $@" | tee -a ${LOGFILE}
-}
-function isRoot {
-	return $(test "$EUID" -eq 0)
+function get_all_torrents {
+	transmission-remote --list | sed '1d;$d' | awk '{print $1}'
 }
 
-#if ! isRoot; then
-#	echo "Error: root permissions are required" 1>&2
-#	exit 1
-#fi
-
-function isRunning {
-	pidof $NAME > /dev/null && echo true || echo false 
-}
-
-function startApp {
-	if $(isRunning); then
-		log "[$CALLER] Trying to initiate transmission-daemon, but it is already running. Caller cmd: [$CALLER_ARGS]"
-	else
-		log "[$CALLER] Initiating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
-
-		if ! res=$($SERVICE_CMD start); then
-			log "Initialisation failed. Error: \n$res"
-		fi
-		#$NAME --config-dir ${CONFIG_DIR} --log-error --logfile ${LOGFILE}
-	fi
-}
-function stopApp {
-	log "[$CALLER] Terminating transmission-daemon. Caller cmd: [$CALLER_ARGS]"
-	log "$SERVICE_CMD stop"
-	if res=$($SERVICE_CMD stop); then
-		log "$res"
-		# Give it a second to terminate properly
-		sleep 5 
-		validateTermination
-	else
-		log "Termination failed. Error: \n$res"
-	fi
-}
-
-function validateTermination {
-	process=$(pgrep -a transmission)
-	if [ -n "$process" ]; then
-		echo "WARNING: transmission is still running!"
-		echo "$process"
-		cmd="killall transmission-daemon"
-		echo "Attempting to kill..."
-		echo "$cmd"
-		$cmd
-		sleep 5
-		if $(isRunning); then
-			echo "The bastard is still alive, please investigate"
-		else
-			echo "Kill successful"
-		fi
-	fi
-
-}
-
-function getTorrents {
-	torrentarg=$1
-	torrents=$($REMOTE -l | sed '1d;$d')
-
-	if [ -n "$torrentarg" ]; then
-		echo "$torrents" | grep -i "$torrentarg" | awk '{print $1}'
-	else
-		echo "$torrents" | awk '{print $1}'
-	fi
-}
-
-function addTrackers {
+function add_trackers {
 	trackers=$1
-	torrents=$2
+	if [ -z "$trackers" ]; then
+		echo "Please specify trackers"
+		exit 1
+	fi
 
-	echo "$torrents" | while read torrent; do
+	get_all_torrents | while read torrent; do
 		for tracker in $trackers; do
 			if [ -n "$tracker" ]; then
-				result=$($REMOTE -t $torrent -td $tracker)
+				result=$($REMOTE --torrent $torrent --tracker-add $tracker)
 				echo "$torrent: $tracker: $result"
 			fi
 		done
 	done
 }
+function add_torrent {
+	torrentlink=$1
+	if [ -z "$torrentlink" ]; then
+		echo "No torrent link specified"
+		exit 1
+	fi
+	if ! [[ $torrentlink =~ ^magnet ]]; then
+		echo "Invalid magnet link: $torrentlink"
+		exit 1
+	fi
+	transmission-remote --add "$torrentlink"
+	if [ $? -ne 0 ]; then
+		echo "Failed to add torrent with link: $torrentlink"
+		exit 1
+	fi
+}
 
-case "$1" in 
-	start)
-		startApp
-		;;
-	stop)
-		stopApp
+case "$1" in
+	addtorrent)
+		add_torrent "$2"	
 		;;
 	addtracker)
-		if [ -z "$2" ]; then
-			echo "Please specify trackers"
-			exit 1
-		fi
-		if [[ $2 == "--torrent" ]]; then
-			torrentarg=$3
-			shift 2
-		fi
-
-		trackers=$2
-		torrents=$(getTorrents "$torrentarg")
-
-		addTrackers "$trackers" "$torrents" 
+		add_trackers "$2" 
 		;;
 	*)
 		echo "Invalid parameter"
 		exit 2
 		;;
 esac
-
-exit 0
 
