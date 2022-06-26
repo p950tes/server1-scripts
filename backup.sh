@@ -64,7 +64,13 @@ function buildBackupCommand {
 	BACKUP_COMMAND="rsync ${MODIFIERS} ${SOURCES} ${BACKUPDIR}"
 }
 function getBackupSize {
-	du -sb "$BACKUPDIR" | awk '{print $1}'
+	df -B1 --output=used "$BACKUPDISK" | tail -n 1
+}
+function getBackupAvailableDiskSpace {
+	df -B1 --output=avail "$BACKUPDISK" | tail -n 1
+}
+function getBackupDiskSize {
+	df -B1 --output=size "$BACKUPDISK" | tail -n 1
 }
 function formatBytes {
 	echo "$(echo "$1" | numfmt --to=iec-i)B"
@@ -123,18 +129,26 @@ confirm
 # Check if backup disk is mounted
 verifyBackup
 
+backup_disk_size=$(getBackupDiskSize)
 size_before=$(getBackupSize)
-echo -e "\nTotal backup size before backup: $(formatBytes $size_before)\n"
+echo -e "\nTotal backup size before backup: $(formatBytes $size_before) / $(formatBytes $backup_disk_size)"
+echo -e "Available space: $(formatBytes $(getBackupAvailableDiskSpace))\n"
 
 # Execute backup.
 echo -e "Executing backup...\n"
 $BACKUP_COMMAND
 
+if [ $? -ne 0 ]; then
+	echo -e "\nBackup failed, please investigate above errors\n"
+	exit 1
+fi
+
 size_after=$(getBackupSize)
 size_difference=$(expr $size_after - $size_before)
 
-echo -e "\nTotal backup size after backup: $(formatBytes $size_after)"
-echo -e "Backup size difference: $(formatBytes $size_difference)\n"
+echo -e "\nTotal backup size after backup: $(formatBytes $size_after) / $(formatBytes $backup_disk_size)"
+echo -e "Backup size difference: $(formatBytes $size_difference)"
+echo -e "Available space: $(formatBytes $(getBackupAvailableDiskSpace))\n"
 
 unmountBackup
 
