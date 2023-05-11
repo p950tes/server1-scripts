@@ -1,8 +1,6 @@
 #!/bin/bash
 
-REMOTE="transmission-remote"
-
-function get_all_torrents {
+function get_all_torrent_ids {
 	transmission-remote --list | sed '1d;$d' | awk '{print $1}'
 }
 
@@ -13,10 +11,10 @@ function add_trackers {
 		exit 1
 	fi
 
-	get_all_torrents | while read torrent; do
+	get_all_torrent_ids | while read torrent; do
 		for tracker in $trackers; do
 			if [ -n "$tracker" ]; then
-				result=$($REMOTE --torrent $torrent --tracker-add $tracker)
+				result=$(transmission-remote --torrent $torrent --tracker-add $tracker)
 				echo "$torrent: $tracker: $result"
 			fi
 		done
@@ -40,7 +38,10 @@ function add_torrent {
 }
 
 case "$1" in
-	addtorrent)
+	list)
+		transmission-remote --list	
+		;;
+	add)
 		add_torrent "$2"	
 		;;
 	addtracker)
