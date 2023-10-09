@@ -51,7 +51,9 @@ function extract_subtitles {
 	echo
 }
 function filter_unsupported_subtitles {
-	grep -v 'dv[db]_subtitle'
+	grep -v 'dvd_subtitle' |
+	grep -v 'dvb_subtitle' |
+	grep -v 'pgs_subtitle'
 }
 function parse_subtitle_info {
 	local res
