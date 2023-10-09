@@ -115,6 +115,9 @@ function scrub_subtitle {
 	# Remove everything within square brackets
 	sed -i -z -E 's/\[[^]]+\]//g' "$input"
 
+	# Remove everything within parenthesis
+	sed -i -z -E 's/\([^)]+\)//g' "$input"
+
 	# Remove Capitals followed by colon
 	sed -i -z -E 's/[A-Z]{2}+[A-Z0-9 ]*\s?: *\n?//g' "$input"
 }
