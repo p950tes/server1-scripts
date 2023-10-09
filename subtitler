@@ -22,7 +22,7 @@ function extract_subtitles {
 	file_info=$(ffprobe -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
 	# File will look like: "  Stream #0:2(eng): Subtitle: ass"
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
-	subtitles=$(echo "$file_info" | grep -i stream | grep -i subtitle | grep -v dvd_subtitle | sed -E 's/.*#([0-9]+:[0-9]+)\(([a-z]+)\).*/\1|\2/g')
+	subtitles=$(echo "$file_info" | grep -i stream | grep -i subtitle)
 
 	if [ -z "$subtitles" ]; then
 		error "$INPUTFILE does not contain any subtitles."
@@ -32,11 +32,16 @@ function extract_subtitles {
 		mv -v "$INPUTFILE" "$output_file"
 		exit 0
 	fi
-	
-	echo -e "Found $(echo "$subtitles" | wc -l) subtitles: \n$subtitles"
-	extract_subtitles_to "$subtitles" "$output_dir"
 
-	echo "Extraction complete, removing embedded subtitles."
+	echo -e "Found subtitles:\n$subtitles"
+	subtitles=$(echo "$subtitles" | grep -v 'dv[db]_subtitle' | sed -E 's/.*#([0-9]+:[0-9]+)\(([a-z]+)\).*/\1|\2/g')
+
+	if [ -n "$subtitles" ]; then
+		extract_subtitles_to "$subtitles" "$output_dir"
+		echo "Extraction complete, removing embedded subtitles."
+	else
+		error "Only image based subtitles found. Deleting them anyway."
+	fi
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
