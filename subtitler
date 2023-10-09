@@ -103,12 +103,13 @@ function extract_subtitles_to {
 }
 
 function remove_subtitles {
-	output_file="${INPUTFILE_DIR}/${INPUTFILE_BASENAME}"
+	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${INPUTFILE_EXTENSION}"
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
 	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
 	rm -v "$INPUTFILE"
+	mv -v "$output_file" "$INPUTFILE"
 }
 
 function scrub_subtitle {
@@ -164,6 +165,7 @@ INPUTFILE_DIR=$(cd "$(dirname "$INPUTFILE")" && pwd)
 INPUTFILE_BASENAME=$(basename "$INPUTFILE")
 INPUTFILE="$INPUTFILE_DIR/$INPUTFILE_BASENAME"
 INPUTFILENAME_WITHOUT_EXTENSION=${INPUTFILE_BASENAME%.*}
+INPUTFILE_EXTENSION=${INPUTFILE_BASENAME##*.}
 
 case $COMMAND in
 	remove)
