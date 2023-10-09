@@ -103,6 +103,15 @@ function extract_subtitles_to {
 }
 
 function remove_subtitles {
+
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
+	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
+	
+	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
+	if [ -z "$subtitles" ]; then
+		fatal "$INPUTFILE does not contain any subtitles."
+	fi
+
 	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${INPUTFILE_EXTENSION}"
 
 	echo "Creating new file without subtitles: $output_file"
