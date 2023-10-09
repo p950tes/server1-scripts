@@ -22,7 +22,7 @@ function extract_subtitles {
 	file_info=$(ffprobe -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
 	
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
-	subtitles=$(echo "$file_info" | grep -i stream | grep -i subtitle)
+	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
 
 	if [ -z "$subtitles" ]; then
 		error "$INPUTFILE does not contain any subtitles."
