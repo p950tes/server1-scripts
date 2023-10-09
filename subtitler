@@ -57,12 +57,16 @@ function parse_subtitle_info {
 	# Can look like: 
 	#   Stream #0:2(eng): Subtitle: ass
   	#   Stream #0:2[0x3](eng): Subtitle: mov_text (tx3g / 0x67337874), 720x60, 0 kb/s (default)
+	#   Stream #0:2: Subtitle: subrip (default)
 	cat | 
 		sed -E 's/\s*Stream #(.*)/\1/g' | # Remove all preceding junk
 		sed -E 's/\s*: Subtitle.*//g'   | # Remove all trailing junk
 		while read -r line; do
 			stream=$(echo "$line" | grep -o -E '^[0-9]+:[0-9]+')
 			lang=$(  echo "$line" | sed -E -n 's/.*\(([a-z]+)\).*/\1/gp')
+			if [ -z "$lang" ]; then
+				lang="unknown"
+			fi
 			echo "$stream|$lang"
 		done
 }
@@ -77,8 +81,13 @@ function extract_subtitles_to {
 		stream=$(echo "$subtitle" | cut -d'|' -f1)
 		lang=$(echo "$subtitle" | cut -d'|' -f2)
 		output_file="$output_dir/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.srt"
+		
+		local i=0
+		while [ -f "$output_file" ]; do
+			i=$((i+1))
+			output_file="$output_dir/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.$i.srt"
+		done
 		echo "Extracting $output_file"
-		[ -f "$output_file" ] && fatal "Output file already exists: $output_file"
 
 		echo "ffmpeg -i \"$INPUTFILE\" -map \"$stream\" -c srt \"$output_file\""
 
