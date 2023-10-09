@@ -1,0 +1,114 @@
+#!/bin/bash
+
+function error {
+	>&2 echo -e "$*"
+}
+function fatal {
+	>&2 echo -e "$*"
+	exit 1
+}
+function macgyver {
+	for f in Mac*.mkv; do
+		echo "### subtitler --extract -i \"$f\""
+		~/downloads/subtitler --extract -i "$f"
+	done
+}
+
+function extract_subtitles {
+	echo "Extracting subtitles from: $INPUTFILE"
+	file_info=$(ffprobe -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
+	# File will look like: "  Stream #0:2(eng): Subtitle: ass"
+	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
+	subtitles=$(echo "$file_info" | grep -i stream | grep -i subtitle | grep -v dvd_subtitle | sed -E 's/.*#([0-9]+:[0-9]+)\(([a-z]+)\).*/\1|\2/g')
+	[ -z "$subtitles" ] && fatal "$INPUTFILE does not contain any subtitles."
+
+	echo -e "Found $(echo "$subtitles" | wc -l) subtitles: \n$subtitles"
+	filename_without_extension=${INPUTFILE_BASENAME%.*}
+
+	output_dir="$INPUTFILE_DIR/$filename_without_extension"
+	mkdir -p -v "$output_dir"
+
+	for subtitle in $subtitles; do
+		stream=$(echo "$subtitle" | cut -d'|' -f1)
+		lang=$(echo "$subtitle" | cut -d'|' -f2)
+		output_file="$output_dir/${filename_without_extension}.${lang}.srt"
+		echo "Extracting $output_file"
+		[ -f "$output_file" ] && fatal "Output file already exists: $output_file"
+
+		echo "ffmpeg -i \"$INPUTFILE\" -map \"$stream\" -c srt \"$output_file\""
+
+		ffmpeg -loglevel warning -i "$INPUTFILE" -map "$stream" -c srt "$output_file" || fatal "Failed to extract subtitles"
+		scrub_subtitle "$output_file"
+	done
+
+	echo "Extraction complete, removing embedded subtitles."
+
+	output_file="${output_dir}/${INPUTFILE_BASENAME}"
+
+	echo "Creating new file without subtitles: $output_file"
+	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
+	ffmpeg -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
+	rm -v "$INPUTFILE"
+}
+
+function scrub_subtitle {
+	input=$1
+	echo "Scrubbing subtitle: $input"
+	
+	# Remove fonts
+	sed -i -E 's/<\/?font[^>]*>//g' "$input"
+	
+	# Remove everything within square brackets
+	sed -i -z -E 's/\[[^]]+\]//g' "$input"
+
+	# Remove Capitals followed by colon
+	sed -i -z -E 's/[A-Z]{2}+[A-Z0-9 ]*\s?: *\n?//g' "$input"
+}
+
+while [ $# -gt 0 ]; do
+	case $1 in
+		--remove)
+			COMMAND=remove
+			;;
+		--extract)
+			COMMAND=extract
+			;;
+		--scrub)
+			COMMAND=scrub
+			;;
+		-i|--input)
+			INPUTFILE=$2
+			shift 1
+			;;
+		-v|--verbose)
+			VERBOSE=true
+			;;
+		*) 
+			fatal "Unexpected parameter: $1"
+			;;
+	esac
+	shift
+done
+
+[ -z "$COMMAND" ] && fatal "No command specified."
+[ -z "$INPUTFILE" ] && fatal "No input file specified."
+[ ! -f "$INPUTFILE" ] && fatal "Input file does not exist: $INPUTFILE"
+
+INPUTFILE_DIR=$(cd "$(dirname "$INPUTFILE")" && pwd)
+INPUTFILE_BASENAME=$(basename "$INPUTFILE")
+INPUTFILE="$INPUTFILE_DIR/$INPUTFILE_BASENAME"
+
+case $COMMAND in
+	remove)
+		remove_subtitles
+		;;
+	extract)
+		extract_subtitles
+		;;
+	scrub)
+		scrub_subtitle "$INPUTFILE"
+		;;
+	*)
+		fatal "Unknown command: $COMMAND"
+		;;
+esac
