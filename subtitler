@@ -48,6 +48,7 @@ function extract_subtitles {
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
 	ffmpeg -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
 	rm -v "$INPUTFILE"
+	echo
 }
 function filter_unsupported_subtitles {
 	grep -v 'dv[db]_subtitle'
