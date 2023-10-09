@@ -19,7 +19,7 @@ function extract_subtitles {
 	output_file="${output_dir}/${INPUTFILE_BASENAME}"
 
 	echo "Extracting subtitles from: $INPUTFILE"
-	file_info=$(ffprobe -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
 	
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
 	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
@@ -46,7 +46,7 @@ function extract_subtitles {
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
-	ffmpeg -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
+	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
 	rm -v "$INPUTFILE"
 	echo
 }
@@ -97,7 +97,7 @@ function extract_subtitles_to {
 
 		echo "ffmpeg -i \"$INPUTFILE\" -map \"$stream\" -c srt \"$output_file\""
 
-		ffmpeg -loglevel warning -i "$INPUTFILE" -map "$stream" -c srt "$output_file" || fatal "Failed to extract subtitles"
+		ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map "$stream" -c srt "$output_file" || fatal "Failed to extract subtitles"
 		scrub_subtitle "$output_file"
 	done
 }
@@ -107,7 +107,7 @@ function remove_subtitles {
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
-	ffmpeg -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
+	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
 	rm -v "$INPUTFILE"
 }
 
