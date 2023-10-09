@@ -45,6 +45,7 @@ function extract_subtitles {
 }
 
 function extract_subtitles_to {
+	local subtitles output_dir stream lang output_file
 	subtitles=$1
 	output_dir=$2
 	mkdir -p -v "$output_dir"
