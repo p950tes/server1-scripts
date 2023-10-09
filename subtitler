@@ -35,7 +35,8 @@ function extract_subtitles {
 
 	echo -e "Found subtitles:\n$subtitles"
 	subtitles=$(echo "$subtitles" | grep -v 'dv[db]_subtitle' | sed -E 's/.*#([0-9]+:[0-9]+)\(([a-z]+)\).*/\1|\2/g')
-
+	mkdir -p -v "$output_dir"
+	
 	if [ -n "$subtitles" ]; then
 		extract_subtitles_to "$subtitles" "$output_dir"
 		echo "Extraction complete, removing embedded subtitles."
