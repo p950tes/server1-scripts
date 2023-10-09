@@ -34,7 +34,7 @@ function extract_subtitles {
 	fi
 
 	echo -e "Found subtitles:\n$subtitles"
-	subtitles=$(echo "$subtitles" | filter_unsupported_subtitles | parse_subtitle_info)
+	subtitles=$(echo "$subtitles" | filter_unsupported_subtitles | parse_subtitle_info) || fatal "Failed to parse subtitles from info: \n$file_info"
 	mkdir -p -v "$output_dir"
 
 	if [ -n "$subtitles" ]; then
@@ -54,21 +54,25 @@ function filter_unsupported_subtitles {
 	grep -v 'dv[db]_subtitle'
 }
 function parse_subtitle_info {
+	local res
 	# Can look like: 
 	#   Stream #0:2(eng): Subtitle: ass
   	#   Stream #0:2[0x3](eng): Subtitle: mov_text (tx3g / 0x67337874), 720x60, 0 kb/s (default)
 	#   Stream #0:2: Subtitle: subrip (default)
-	cat | 
+	res=$(cat | 
 		sed -E 's/\s*Stream #(.*)/\1/g' | # Remove all preceding junk
 		sed -E 's/\s*: Subtitle.*//g'   | # Remove all trailing junk
 		while read -r line; do
 			stream=$(echo "$line" | grep -o -E '^[0-9]+:[0-9]+')
 			lang=$(  echo "$line" | sed -E -n 's/.*\(([a-z]+)\).*/\1/gp')
-			if [ -z "$lang" ]; then
-				lang="unknown"
-			fi
+			[ -z "$stream" ] && stream="unknown"
+			[ -z "$lang" ] && lang="unknown"
 			echo "$stream|$lang"
-		done
+		done)
+	if echo "$res" | grep -q '^unknown'; then
+		fatal "Failed to resolve stream number for some subtitle streams. Result was: \n$res"
+	fi
+	echo "$res"
 }
 
 function extract_subtitles_to {
