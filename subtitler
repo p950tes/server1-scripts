@@ -14,40 +14,44 @@ function macgyver {
 	done
 }
 
-function extract_subtitles {
-	output_dir="$INPUTFILE_DIR/$INPUTFILENAME_WITHOUT_EXTENSION"
-	output_file="${output_dir}/${INPUTFILE_BASENAME}"
+function do_extract {
 
 	echo "Extracting subtitles from: $INPUTFILE"
 	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
 	
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
-	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
+	subtitles_data=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
 
-	if [ -z "$subtitles" ]; then
+	if [ -z "$subtitles_data" ]; then
 		error "$INPUTFILE does not contain any subtitles."
-		[ -z "$IGNORE_NOT_FOUND" ] && fatal
-
-		mkdir -p -v "$output_dir"
-		mv -v "$INPUTFILE" "$output_file"
+		[ -z "$CREATE_DIR" ] && fatal
+		
+		mkdir -p -v "$OUTPUT_DIR"
+		mv -v "$INPUTFILE" "$OUTPUT_DIR/"
 		exit 0
 	fi
 
-	echo -e "Found subtitles:\n$subtitles"
-	subtitles=$(echo "$subtitles" | filter_unsupported_subtitles | parse_subtitle_info) || fatal "Failed to parse subtitles from info: \n$file_info"
-	mkdir -p -v "$output_dir"
+	echo -e "Found subtitles:\n$subtitles_data"
+	subtitles=$(echo "$subtitles_data" | filter_unsupported_subtitles | parse_subtitle_info) || fatal "Failed to parse subtitles from info: \n$subtitles_data"
+	
+	mkdir -p -v "$OUTPUT_DIR"
 
 	if [ -n "$subtitles" ]; then
-		extract_subtitles_to "$subtitles" "$output_dir"
+		extract_subtitles "$subtitles"
 		echo "Extraction complete, removing embedded subtitles."
 	else
 		error "Only image based subtitles found. Deleting them anyway."
 	fi
 
+	old_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.old.${INPUTFILE_EXTENSION}"
+
+	mv -v "$INPUTFILE" "$old_file"
+	output_file="${OUTPUT_DIR}/${INPUTFILE_BASENAME}"
+
 	echo "Creating new file without subtitles: $output_file"
-	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
-	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -sn -c copy "$output_file" || fatal "Failed to remove subtitles"
-	rm -v "$INPUTFILE"
+	echo "ffmpeg -i \"$old_file\" -sn -c copy \"$output_file\""
+	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$old_file" -sn -c copy "$output_file" || fatal "Failed to create new file without subtitles"
+	rm -v "$old_file"
 	echo
 }
 function filter_unsupported_subtitles {
@@ -85,21 +89,20 @@ function parse_subtitle_info {
 	echo "$res"
 }
 
-function extract_subtitles_to {
-	local subtitles output_dir stream lang output_file
+function extract_subtitles {
+	local subtitles stream lang output_file
 	subtitles=$1
-	output_dir=$2
-	mkdir -p -v "$output_dir"
+	mkdir -p -v "$OUTPUT_DIR"
 
 	for subtitle in $subtitles; do
 		stream=$(echo "$subtitle" | cut -d'|' -f1)
 		lang=$(echo "$subtitle" | cut -d'|' -f2)
-		output_file="$output_dir/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.srt"
+		output_file="$OUTPUT_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.srt"
 		
 		local i=0
 		while [ -f "$output_file" ]; do
 			i=$((i+1))
-			output_file="$output_dir/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.$i.srt"
+			output_file="$OUTPUT_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${lang}.$i.srt"
 		done
 		echo "Extracting $output_file"
 
@@ -110,7 +113,7 @@ function extract_subtitles_to {
 	done
 }
 
-function remove_subtitles {
+function do_remove {
 
 	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
@@ -162,8 +165,8 @@ while [ $# -gt 0 ]; do
 			INPUTFILE=$2
 			shift 1
 			;;
-		--ignore-not-found)
-			IGNORE_NOT_FOUND=true
+		--create-dir)
+			CREATE_DIR=true
 			;;
 		-v|--verbose)
 			VERBOSE=true
@@ -185,12 +188,18 @@ INPUTFILE="$INPUTFILE_DIR/$INPUTFILE_BASENAME"
 INPUTFILENAME_WITHOUT_EXTENSION=${INPUTFILE_BASENAME%.*}
 INPUTFILE_EXTENSION=${INPUTFILE_BASENAME##*.}
 
+if [ -n "$CREATE_DIR" ]; then
+	OUTPUT_DIR="$INPUTFILE_DIR/$INPUTFILENAME_WITHOUT_EXTENSION"
+else
+	OUTPUT_DIR="$INPUTFILE_DIR"
+fi
+
 case $COMMAND in
 	remove)
-		remove_subtitles
+		do_remove
 		;;
 	extract)
-		extract_subtitles
+		do_extract
 		;;
 	scrub)
 		scrub_subtitle "$INPUTFILE"
