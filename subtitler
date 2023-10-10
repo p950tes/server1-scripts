@@ -73,6 +73,10 @@ function parse_subtitle_info {
 			if echo "$line" | grep -q "(forced)"; then
 				lang="$lang.forced"
 			fi
+			if echo "$line" | grep -q "(hearing impaired)"; then
+				lang="$lang.hi"
+			fi
+			
 			echo "$stream|$lang"
 		done)
 	if echo "$res" | grep -q '^unknown'; then
