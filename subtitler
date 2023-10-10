@@ -63,12 +63,15 @@ function parse_subtitle_info {
 	#   Stream #0:2: Subtitle: subrip (default)
 	res=$(cat | 
 		sed -E 's/\s*Stream #(.*)/\1/g' | # Remove all preceding junk
-		sed -E 's/\s*: Subtitle.*//g'   | # Remove all trailing junk
 		while read -r line; do
+			line=$(echo "$line" | sed -E 's/\s*: Subtitle.*//g')
 			stream=$(echo "$line" | grep -o -E '^[0-9]+:[0-9]+')
 			lang=$(  echo "$line" | sed -E -n 's/.*\(([a-z]+)\).*/\1/gp')
 			[ -z "$stream" ] && stream="unknown"
 			[ -z "$lang" ] && lang="unknown"
+			if echo "$line" | grep -q "(forced)"; then
+				lang="$lang.forced"
+			fi
 			echo "$stream|$lang"
 		done)
 	if echo "$res" | grep -q '^unknown'; then
