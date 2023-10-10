@@ -115,6 +115,7 @@ function remove_subtitles {
 	if [ -z "$subtitles" ]; then
 		fatal "$INPUTFILE does not contain any subtitles."
 	fi
+	echo -e "Found subtitles:\n$subtitles"
 
 	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${INPUTFILE_EXTENSION}"
 
