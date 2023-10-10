@@ -38,9 +38,13 @@ function do_extract {
 
 	if [ -n "$subtitles" ]; then
 		extract_subtitles "$subtitles"
-		echo "Extraction complete, removing embedded subtitles."
+		echo "Extraction complete."
 	else
-		error "Only image based subtitles found. Deleting them anyway."
+		error "Only image based subtitles found."
+	fi
+
+	if [ -z "$REMOVE_AFTER_EXTRACT" ]; then
+		exit 0
 	fi
 
 	old_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.old.${INPUTFILE_EXTENSION}"
@@ -160,6 +164,9 @@ while [ $# -gt 0 ]; do
 			;;
 		--scrub)
 			COMMAND=scrub
+			;;
+		-d|--remove-after-extract)
+			REMOVE_AFTER_EXTRACT=true
 			;;
 		-i|--input)
 			INPUTFILE=$2
