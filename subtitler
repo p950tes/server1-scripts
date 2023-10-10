@@ -201,7 +201,7 @@ else
 	OUTPUT_DIR="$INPUTFILE_DIR"
 fi
 
-echo "Inputfile: $INPUTFILE"
+echo -e "\nInputfile: $INPUTFILE"
 
 case $COMMAND in
 	remove)
