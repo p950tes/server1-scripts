@@ -124,7 +124,7 @@ function do_remove {
 	
 	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
 	if [ -z "$subtitles" ]; then
-		fatal "$INPUTFILE does not contain any subtitles."
+		fatal "No subtitles found."
 	fi
 	echo -e "Found subtitles:\n$subtitles"
 
