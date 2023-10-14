@@ -154,7 +154,7 @@ def sendEmail(emailContents):
         subject += " " + ARGS.date
 
     mailProcess = subprocess.Popen(["mailx", "-s " + subject, ARGS.mail], stdin=subprocess.PIPE)
-    mailProcess.communicate(emailContents)
+    mailProcess.communicate(emailContents.encode())
 
 
 #--------------------
