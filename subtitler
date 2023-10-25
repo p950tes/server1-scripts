@@ -16,6 +16,9 @@ Operations:
   --scrub           Scrubs the specified subtitle of HI artifacts. 
                     Input file has to be a subtitle
 
+  --list            List all subtitles in the file
+                    Input file has to be a Video file
+
   --remove          Remove all subtitles from the file
                     Input file has to be a Video file
 
@@ -34,10 +37,24 @@ EOE
     exit 1
 }
 
+function do_list {
+	echo "Probing subtitles from: $INPUTFILE"
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
+	
+	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
+	subtitles_data=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
+
+	if [ -z "$subtitles_data" ]; then
+		echo -e "No subtitles found."
+	else
+	    echo -e "Found subtitles:\n$subtitles_data"	
+    fi
+}
+
 function do_extract {
 
 	echo "Extracting subtitles from: $INPUTFILE"
-	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
 	
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
 	subtitles_data=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
@@ -139,7 +156,7 @@ function extract_subtitles {
 
 function do_remove {
 
-	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info usinf ffprobe. Output: \n$file_info"
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
 	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
 	
 	subtitles=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Subtitle:")
@@ -181,6 +198,9 @@ while [ $# -gt 0 ]; do
 			;;
 		--extract)
 			COMMAND=extract
+			;;
+        --list)
+			COMMAND=list
 			;;
 		--scrub)
 			COMMAND=scrub
@@ -228,16 +248,14 @@ fi
 echo -e "\nInputfile: $INPUTFILE"
 
 case $COMMAND in
+    list)
+        do_list ;;
 	remove)
-		do_remove
-		;;
+		do_remove ;;
 	extract)
-		do_extract
-		;;
+		do_extract ;;
 	scrub)
-		scrub_subtitle "$INPUTFILE"
-		;;
+		scrub_subtitle "$INPUTFILE" ;;
 	*)
-		fatal "Unknown command: $COMMAND"
-		;;
+		fatal "Unknown command: $COMMAND" ;;
 esac
