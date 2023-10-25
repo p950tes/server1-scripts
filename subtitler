@@ -7,11 +7,31 @@ function fatal {
 	>&2 echo -e "$*"
 	exit 1
 }
-function macgyver {
-	for f in Mac*.mkv; do
-		echo "### subtitler --extract -i \"$f\""
-		subtitler --extract -i "$f"
-	done
+
+function usage {
+	cat << EOE
+Usage: subtitler [OPTION]... -i [FILE]
+
+Operations:
+  --scrub           Scrubs the specified subtitle of HI artifacts. 
+                    Input file has to be a subtitle
+
+  --remove          Remove all subtitles from the file
+                    Input file has to be a Video file
+
+  --extract         Extract all subtitles from the file
+                    Input file has to be a Video file
+
+Common options:
+  -i, --input       Specifies the input file
+  -v                Verbose
+
+Extract options:
+  -d, --remove-after-extract    Removes the subtitles from the Video file after extraction
+  --create-dir                  Creates a directory for the video file and its subtitles
+
+EOE
+    exit 1
 }
 
 function do_extract {
@@ -178,14 +198,18 @@ while [ $# -gt 0 ]; do
 		-v|--verbose)
 			VERBOSE=true
 			;;
+        -h|--help)
+            usage
+            ;;
 		*) 
-			fatal "Unexpected parameter: $1"
+			error "Unexpected parameter: $1\n"
+            usage
 			;;
 	esac
 	shift
 done
 
-[ -z "$COMMAND" ] && fatal "No command specified."
+[ -z "$COMMAND" ] && usage
 [ -z "$INPUTFILE" ] && fatal "No input file specified."
 [ ! -f "$INPUTFILE" ] && fatal "Input file does not exist: $INPUTFILE"
 
