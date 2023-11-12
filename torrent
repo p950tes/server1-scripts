@@ -21,11 +21,7 @@ function add_trackers {
 	done
 }
 function add_torrent {
-	torrentlink=$1
-	if [ -z "$torrentlink" ]; then
-		echo "No torrent link specified"
-		exit 1
-	fi
+	torrentlink=${1:?'No torrent link specified'}
 	if ! [[ $torrentlink =~ ^magnet ]]; then
 		echo "Invalid magnet link: $torrentlink"
 		exit 1
@@ -36,6 +32,18 @@ function add_torrent {
 		exit 1
 	fi
 }
+function remove_torrent {
+	id=${1:?'No torrent id specified'}
+	if ! get_all_torrent_ids | grep -qx "$id"; then
+		echo "No such torrent id: $id"
+		exit 1
+	fi
+	transmission-remote --torrent "$id" --remove
+	if [ $? -ne 0 ]; then
+		echo "Failed to remove torrent with id: $id"
+		exit 1
+	fi
+}
 
 case "$1" in
 	list)
@@ -43,6 +51,9 @@ case "$1" in
 		;;
 	add)
 		add_torrent "$2"	
+		;;
+	rm)
+		remove_torrent "$2";
 		;;
 	addtracker)
 		add_trackers "$2" 
