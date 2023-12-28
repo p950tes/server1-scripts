@@ -58,6 +58,16 @@ case "$1" in
 	addtracker)
 		add_trackers "$2" 
 		;;
+	status) 
+		sudo systemctl status transmission-openvpn
+		;;
+	start|stop|restart) 
+		sudo systemctl "$1" transmission-openvpn
+		sudo systemctl status transmission-openvpn
+		;;
+	log)
+		journalctl -e -u transmission-openvpn
+		;;
 	*)
 		echo "Invalid parameter"
 		exit 2
