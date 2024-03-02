@@ -1,5 +1,5 @@
 #!/bin/bash
 
-cmd="/usr/bin/docker pull haugene/transmission-openvpn"
-echo $cmd
-$cmd
+echo "/usr/bin/docker pull haugene/transmission-openvpn"
+
+/usr/bin/docker pull haugene/transmission-openvpn

@@ -44,6 +44,15 @@ function remove_torrent {
 		exit 1
 	fi
 }
+function enter_container {
+	local container_id=$(docker ps --filter "name=transmission-openvpn" -q)
+	if [ -z "$container_id" ]; then
+		echo "No running container found"
+		exit 1
+	fi
+	echo "Entering container $container_id"
+	docker exec -it "$container_id" /bin/bash
+}
 
 case "$1" in
 	list)
@@ -68,9 +77,15 @@ case "$1" in
 	log)
 		journalctl -e -o short-iso -u transmission-openvpn
 		;;
+	update-image)
+		echo "/usr/local/bin/update-transmission-image.sh"
+		/usr/local/bin/update-transmission-image.sh
+		;;
+	enter-container)
+		enter_container
+		;;
 	*)
 		echo "Invalid parameter"
 		exit 2
 		;;
 esac
-
