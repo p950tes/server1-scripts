@@ -53,6 +53,10 @@ function enter_container {
 	echo "Entering container $container_id"
 	docker exec -it "$container_id" /bin/bash
 }
+function update_container {
+	echo "docker-compose --project-directory /etc/openvpn/docker up -d"
+	docker-compose --project-directory "/etc/openvpn/docker" up -d
+}
 
 case "$1" in
 	list)
@@ -83,6 +87,9 @@ case "$1" in
 		;;
 	enter-container)
 		enter_container
+		;;
+	update-container)
+		update_container
 		;;
 	*)
 		echo "Invalid parameter"
