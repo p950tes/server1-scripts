@@ -26,8 +26,9 @@ Operations:
                     Input file has to be a Video file
 
 Common options:
-  -i, --input       Specifies the input file
-  -v                Verbose
+  -i, --input       			 Specifies the input file
+  -v                			 Verbose
+  --output-container {container} Specify a new output container
 
 Extract options:
   -d, --remove-after-extract    Removes the subtitles from the Video file after extraction
@@ -87,7 +88,7 @@ function do_extract {
 	old_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.old.${INPUTFILE_EXTENSION}"
 
 	mv -v "$INPUTFILE" "$old_file"
-	output_file="${OUTPUT_DIR}/${INPUTFILE_BASENAME}"
+	output_file="${OUTPUT_DIR}/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$old_file\" -sn -c copy \"$output_file\""
@@ -165,7 +166,7 @@ function do_remove {
 	fi
 	echo -e "Found subtitles:\n$subtitles"
 
-	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${INPUTFILE_EXTENSION}"
+	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
 
 	echo "Creating new file without subtitles: $output_file"
 	echo "ffmpeg -i \"$INPUTFILE\" -sn -c copy \"$output_file\""
@@ -209,11 +210,15 @@ while [ $# -gt 0 ]; do
 			REMOVE_AFTER_EXTRACT=true
 			;;
 		-i|--input)
-			INPUTFILE=$2
+			INPUTFILE=${2:?'-i requires a parameter'}
 			shift 1
 			;;
 		--create-dir)
 			CREATE_DIR=true
+			;;
+		--output-container)
+			OUTPUT_CONTAINER=${2:?'--output-container requires a parameter'}
+			shift 1
 			;;
 		-v|--verbose)
 			VERBOSE=true
@@ -243,6 +248,10 @@ if [ -n "$CREATE_DIR" ]; then
 	OUTPUT_DIR="$INPUTFILE_DIR/$INPUTFILENAME_WITHOUT_EXTENSION"
 else
 	OUTPUT_DIR="$INPUTFILE_DIR"
+fi
+
+if [ -z "$OUTPUT_CONTAINER" ]; then
+	OUTPUT_CONTAINER=$INPUTFILE_EXTENSION
 fi
 
 echo -e "\nInputfile: $INPUTFILE"
