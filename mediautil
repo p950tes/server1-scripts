@@ -1,0 +1,114 @@
+#!/bin/bash
+
+function error {
+	>&2 echo -e "$*"
+}
+function fatal {
+	>&2 echo -e "$*"
+	exit 1
+}
+
+function usage {
+	cat << EOE
+Usage: mediautil [OPTION]... [FILE]
+
+Operations:
+  --set-audio-lang {lang}	Sets audio language of the specified file 
+
+  --output-container {container} Specify a new output container
+
+
+Common options:
+  -v                			 Verbose
+
+EOE
+    exit 1
+}
+
+function set_audio_language {
+	language=$1
+	echo "Setting audio language of $INPUTFILE to $language"
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
+	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
+	
+	audio_streams=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Audio:")
+	if [ -z "$audio_streams" ]; then
+		fatal "No audio streams found."
+	elif [ "$(echo "$audio_streams" | wc -l)" -gt 1 ]; then
+		fatal "More than one audio stream found: \n$audio_streams"
+	fi
+	echo -e "Found audio stream:\n$audio_streams"
+
+	output_file="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+
+	echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$output_file\""
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$output_file" || fatal "Failed to update audio stream language"
+	rm -v "$INPUTFILE"
+	mv -v "$output_file" "$INPUTFILE"
+}
+
+function change_container {
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
+	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
+
+	output_file="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+
+	# '-map_chapters -1' removes any potential chapters, which may not be supported by the target container
+	echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map 0 -c copy -map_chapters -1 \"$output_file\""
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -map_chapters -1 "$output_file" || fatal "Failed to change container"
+	rm -v "$INPUTFILE"
+	mv -v "$output_file" "$INPUTFILE"
+}
+
+while [ $# -gt 0 ]; do
+	case $1 in
+		--set-audio-lang)
+			COMMAND=set_audio_language
+			NEW_AUDIO_LANGUAGE=${2:?'--set-audio-lang requires a parameter'}
+			shift 1
+			;;
+		--output-container)
+			OUTPUT_CONTAINER=${2:?'--output-container requires a parameter'}
+			shift 1
+			;;
+		-v|--verbose)
+			VERBOSE=true
+			;;
+        -h|--help)
+            usage
+            ;;
+		*) 
+			INPUTFILE=$1
+			;;
+	esac
+	shift
+done
+
+[ -z "$INPUTFILE" ] && fatal "No input file specified."
+[ ! -f "$INPUTFILE" ] && fatal "Input file does not exist: $INPUTFILE"
+
+WORKING_DIR=$(cd "$(dirname "$INPUTFILE")" && pwd)
+INPUTFILE_BASENAME=$(basename "$INPUTFILE")
+INPUTFILENAME_WITHOUT_EXTENSION=${INPUTFILE_BASENAME%.*}
+INPUTFILE_EXTENSION=${INPUTFILE_BASENAME##*.}
+
+if [ -z "$OUTPUT_CONTAINER" ]; then
+	OUTPUT_CONTAINER=$INPUTFILE_EXTENSION
+fi
+
+if [ -z "$COMMAND" ] && [[ $INPUTFILE_EXTENSION != $OUTPUT_CONTAINER ]]; then
+	COMMAND=change_container
+fi
+
+[ -z "$COMMAND" ] && usage
+
+echo -e "\nInputfile: $INPUTFILE"
+
+case $COMMAND in
+    set_audio_language)
+        set_audio_language "$NEW_AUDIO_LANGUAGE";;
+	change_container)
+        change_container ;;
+	*)
+		fatal "Unknown command: $COMMAND" ;;
+esac

@@ -91,8 +91,8 @@ function do_extract {
 	output_file="${OUTPUT_DIR}/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
 
 	echo "Creating new file without subtitles: $output_file"
-	echo "ffmpeg -i \"$old_file\" -c copy -map 0 -sn \"$output_file\""
-	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$old_file" -c copy -map 0 -sn "$output_file" || fatal "Failed to create new file without subtitles"
+	echo "ffmpeg -nostdin -i \"$old_file\" -c copy -map 0 -sn \"$output_file\""
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$old_file" -c copy -map 0 -sn "$output_file" || fatal "Failed to create new file without subtitles"
 	rm -v "$old_file"
 	echo
 }
@@ -148,9 +148,9 @@ function extract_subtitles {
 		done
 		echo "Extracting $output_file"
 
-		echo "ffmpeg -i \"$INPUTFILE\" -map \"$stream\" -c srt \"$output_file\""
+		echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map \"$stream\" -c srt \"$output_file\""
 
-		ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map "$stream" -c srt "$output_file" || fatal "Failed to extract subtitles"
+		ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map "$stream" -c srt "$output_file" || fatal "Failed to extract subtitles"
 		scrub_subtitle "$output_file"
 	done
 }
@@ -169,8 +169,8 @@ function do_remove {
 	output_file="$INPUTFILE_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
 
 	echo "Creating new file without subtitles: $output_file"
-	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -sn \"$output_file\""
-	ffmpeg -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -sn "$output_file" || fatal "Failed to remove subtitles"
+	echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map 0 -c copy -sn \"$output_file\""
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -sn "$output_file" || fatal "Failed to remove subtitles"
 	rm -v "$INPUTFILE"
 	mv -v "$output_file" "$INPUTFILE"
 }
