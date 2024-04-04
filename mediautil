@@ -52,7 +52,7 @@ EOE
 }
 
 function set_audio_language {
-	local language audio_streams
+	local language audio_streams extra_params
 	language=$1
 	audio_streams=$(get_streams "$INPUTFILE" | grep "Audio:") || fatal "No audio streams found."
 	if [ "$(echo "$audio_streams" | wc -l)" -gt 1 ]; then
@@ -61,10 +61,14 @@ function set_audio_language {
 	echo -e "Found audio stream:\n$audio_streams"
     echo -e "\nWill update stream language tag to: $language"
 
+    if [[ $CONTAINER_CHANGE = true ]]; then
+        extra_params="-dn -map_chapters -1"
+    fi
+
     confirm
-    echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$WORKING_FILE\""
+    echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language $extra_params $WORKING_FILE"
 	
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$WORKING_FILE" || fatal "Failed to update audio stream language"
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language $extra_params "$WORKING_FILE" || fatal "Failed to update audio stream language"
 	
 	cleanup
 }
@@ -218,10 +222,12 @@ INPUTFILE_EXTENSION=${INPUTFILE_BASENAME##*.}
 
 if [ -z "$OUTPUT_CONTAINER" ]; then
 	OUTPUT_CONTAINER=$INPUTFILE_EXTENSION
-fi
 
-if [ -z "$COMMAND" ] && [[ "$INPUTFILE_EXTENSION" != "$OUTPUT_CONTAINER" ]]; then
-	COMMAND="--output-container"
+elif [[ "$INPUTFILE_EXTENSION" != "$OUTPUT_CONTAINER" ]]; then
+    CONTAINER_CHANGE=true
+    if [ -z "$COMMAND" ]; then
+        COMMAND="--output-container"
+    fi
 fi
 
 [ -z "$COMMAND" ] && usage
