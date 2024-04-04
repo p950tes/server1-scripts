@@ -70,9 +70,11 @@ function set_audio_language {
 
 function change_container {
 	# '-map_chapters -1' removes any potential chapters, which may not be supported by the target container
-	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -dn -map_chapters -1 \"$OUTPUT_FILE\""
+	echo -e "Will change container to: $OUTPUT_CONTAINER"
+
 	confirm
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -dn -map_chapters -1 "$OUTPUT_FILE" || fatal "Failed to change container"
+	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -dn -map_chapters -1 \"$OUTPUT_FILE\""
+    ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -dn -map_chapters -1 "$OUTPUT_FILE" || fatal "Failed to change container"
 	
 	cleanup
 }
