@@ -3,6 +3,7 @@
 VERBOSE=false
 CONFIRM=true
 NO_CLEANUP=false
+DRY_RUN=false
 
 function error {
 	>&2 echo -e "$*"
@@ -17,6 +18,10 @@ function verbose {
 	fi
 }
 function confirm {
+    if $DRY_RUN; then
+        echo -e "Dry-run. Exiting."
+        exit 0
+    fi
 	if $CONFIRM; then
 		echo -e "\nPress ENTER to continue or CTRL-C to abort"
 		read -r
@@ -40,6 +45,7 @@ Common options:
   -v    		Verbose
   --no-cleanup 	Disables cleanup after completed action, i.e. old and new file will both remain.
   --confirm		Asks for confirmation before executing action
+  --dry-run     Make no changes
 
 EOE
     exit 1
@@ -152,7 +158,7 @@ function cleanup {
 	echo
 }
 
-while [ $# -gt 0 ]; do
+while [ $# -gt 1 ]; do
 	case $1 in
 		--set-audio-lang)
 			COMMAND=$1
@@ -182,6 +188,9 @@ while [ $# -gt 0 ]; do
         --no-confirm)
 			CONFIRM=false
 			;;
+        --nono|--dry-run)
+            DRY_RUN=true
+            ;;
 		-v|--verbose)
 			VERBOSE=true
 			;;
@@ -189,14 +198,15 @@ while [ $# -gt 0 ]; do
             usage
             ;;
 		*) 
-			INPUTFILE=$1
+			fatal "Invalid argument: $1"
 			;;
 	esac
 	shift
 done
 
-[ -z "$INPUTFILE" ] && fatal "No input file specified."
+INPUTFILE=$1
 [ ! -f "$INPUTFILE" ] && fatal "Input file does not exist: $INPUTFILE"
+[ -z "$INPUTFILE" ] && fatal "No input file specified."
 
 WORKING_DIR=$(cd "$(dirname "$INPUTFILE")" && pwd)
 INPUTFILE_BASENAME=$(basename "$INPUTFILE")
