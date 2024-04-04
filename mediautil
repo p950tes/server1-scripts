@@ -62,9 +62,9 @@ function set_audio_language {
     echo -e "\nWill update stream language tag to: $language"
 
     confirm
-    echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$OUTPUT_FILE\""
+    echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$WORKING_FILE\""
 	
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$OUTPUT_FILE" || fatal "Failed to update audio stream language"
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$WORKING_FILE" || fatal "Failed to update audio stream language"
 	
 	cleanup
 }
@@ -74,8 +74,8 @@ function change_container {
 	echo -e "Will change container to: $OUTPUT_CONTAINER"
 
 	confirm
-	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -dn -map_chapters -1 \"$OUTPUT_FILE\""
-    ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -dn -map_chapters -1 "$OUTPUT_FILE" || fatal "Failed to change container"
+	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -dn -map_chapters -1 \"$WORKING_FILE\""
+    ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -dn -map_chapters -1 "$WORKING_FILE" || fatal "Failed to change container"
 	
 	cleanup
 }
@@ -128,8 +128,8 @@ function delete_audio_streams {
 	echo -e "\nAbout to remove streams:\n$streams_to_remove\n"
 	confirm
 
-	echo ffmpeg -i "$INPUTFILE" -map 0 $removal_params -c copy "$OUTPUT_FILE"
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 $removal_params -c copy "$OUTPUT_FILE" || fatal "ffmpeg failure"
+	echo ffmpeg -i "$INPUTFILE" -map 0 $removal_params -c copy "$WORKING_FILE"
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 $removal_params -c copy "$WORKING_FILE" || fatal "ffmpeg failure"
 
 	cleanup
 }
@@ -150,14 +150,14 @@ function cleanup {
 	if $NO_CLEANUP; then
 		echo "no-cleanup flag enabled, will not remove old file."
 		echo -e "\nOriginal file: $INPUTFILE"
-		echo -e "Modified file: $OUTPUT_FILE"
+		echo -e "Modified file: $WORKING_FILE"
 		return 0
 	fi
-	if [ ! -f "$OUTPUT_FILE" ]; then
-		fatal "$OUTPUT_FILE does not exist. Aborting cleanup"
+	if [ ! -f "$WORKING_FILE" ]; then
+		fatal "$WORKING_FILE does not exist. Aborting cleanup"
 	fi
 	rm -v "$INPUTFILE"
-	mv -v "$OUTPUT_FILE" "$INPUTFILE"
+	mv -v "$WORKING_FILE" "$OUTPUT_FILE"
 	echo
 }
 
@@ -226,7 +226,11 @@ fi
 
 [ -z "$COMMAND" ] && usage
 
-OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+WORKING_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+[ -f "$WORKING_FILE" ] && fatal "Work file already exists: $WORKING_FILE"
+
+OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
+[ -f "$OUTPUT_FILE" ] && fatal "Output file already exists: $OUTPUT_FILE"
 
 echo -e "\nInputfile: $INPUTFILE"
 
