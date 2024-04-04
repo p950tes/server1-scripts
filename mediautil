@@ -39,7 +39,7 @@ Operations:
 
   --delete-audio-track {track}
 
-  --delete-all-audio-tracks-except {track}
+  --delete-audio-tracks-except {track}
 
 Common options:
   -v    		Verbose
@@ -174,7 +174,7 @@ while [ $# -gt 1 ]; do
 			track_sel=${2:?'parameter required'}
 			shift 1
 			;;
-		--delete-all-audio-tracks-except)
+		--delete-audio-tracks-except)
 			COMMAND=$1
 			track_sel=${2:?'parameter required'}
 			shift 1
@@ -231,7 +231,7 @@ case $COMMAND in
     --set-audio-lang) 					set_audio_language "$NEW_AUDIO_LANGUAGE" ;;
 	--output-container)					change_container "$OUTPUT_CONTAINER";;
 	--delete-audio-track)				delete_audio_track "$track_sel" ;;
-	--delete-all-audio-tracks-except)	delete_audio_tracks_except "$track_sel" ;;
+	--delete-audio-tracks-except)	delete_audio_tracks_except "$track_sel" ;;
 	*)
 		fatal "Unknown command: $COMMAND" ;;
 esac
