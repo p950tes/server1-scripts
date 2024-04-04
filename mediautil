@@ -54,15 +54,16 @@ EOE
 function set_audio_language {
 	local language audio_streams
 	language=$1
-	echo "Setting audio language of $INPUTFILE to $language"	
 	audio_streams=$(get_streams "$INPUTFILE" | grep "Audio:") || fatal "No audio streams found."
 	if [ "$(echo "$audio_streams" | wc -l)" -gt 1 ]; then
 		fatal "More than one audio stream found: \n$audio_streams"
 	fi
 	echo -e "Found audio stream:\n$audio_streams"
+    echo -e "\nWill update stream language tag to: $language"
 
-	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$OUTPUT_FILE\""
-	confirm
+    confirm
+    echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$OUTPUT_FILE\""
+	
 	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$OUTPUT_FILE" || fatal "Failed to update audio stream language"
 	
 	cleanup
