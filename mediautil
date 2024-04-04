@@ -1,11 +1,22 @@
 #!/bin/bash
 
+function verbose {
+	if [ -n "$VERBOSE" ]; then
+		>&2 echo -e "$*"
+	fi
+}
 function error {
 	>&2 echo -e "$*"
 }
 function fatal {
 	>&2 echo -e "$*"
 	exit 1
+}
+function confirm {
+	if [ -n "$CONFIRM" ]; then
+		echo -e "\nPress ENTER to continue or CTRL-C to abort"
+		read -r
+	fi
 }
 
 function usage {
@@ -17,59 +28,152 @@ Operations:
 
   --output-container {container} Specify a new output container
 
+  --delete-audio-track {track}
+
+  --delete-all-audio-tracks-except {track}
 
 Common options:
-  -v                			 Verbose
+  -v    		Verbose
+  --no-cleanup 	Disables cleanup after completed action, i.e. old and new file will both remain.
+  --confirm		Asks for confirmation before executing action
 
 EOE
     exit 1
 }
 
 function set_audio_language {
+	local language audio_streams
 	language=$1
-	echo "Setting audio language of $INPUTFILE to $language"
-	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
-	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
-	
-	audio_streams=$(echo "$file_info" | grep -i "^\s*Stream" | grep -i "Audio:")
-	if [ -z "$audio_streams" ]; then
-		fatal "No audio streams found."
-	elif [ "$(echo "$audio_streams" | wc -l)" -gt 1 ]; then
+	echo "Setting audio language of $INPUTFILE to $language"	
+	audio_streams=$(get_streams "$INPUTFILE" | grep "Audio:") || fatal "No audio streams found."
+	if [ "$(echo "$audio_streams" | wc -l)" -gt 1 ]; then
 		fatal "More than one audio stream found: \n$audio_streams"
 	fi
 	echo -e "Found audio stream:\n$audio_streams"
 
-	output_file="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
-
-	echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$output_file\""
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$output_file" || fatal "Failed to update audio stream language"
-	rm -v "$INPUTFILE"
-	mv -v "$output_file" "$INPUTFILE"
+	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -metadata:s:a:0 language=$language \"$OUTPUT_FILE\""
+	confirm
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -metadata:s:a:0 language=$language "$OUTPUT_FILE" || fatal "Failed to update audio stream language"
+	
+	cleanup
 }
 
 function change_container {
-	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$INPUTFILE" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
-	[ -n "$VERBOSE" ] && echo -e "ffprobe result: \n$file_info"
-
-	output_file="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
-
 	# '-map_chapters -1' removes any potential chapters, which may not be supported by the target container
-	echo "ffmpeg -nostdin -i \"$INPUTFILE\" -map 0 -c copy -map_chapters -1 \"$output_file\""
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -map_chapters -1 "$output_file" || fatal "Failed to change container"
+	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -map_chapters -1 \"$OUTPUT_FILE\""
+	confirm
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -map_chapters -1 "$OUTPUT_FILE" || fatal "Failed to change container"
+	
+	cleanup
+}
+
+function delete_audio_tracks_except {
+	local track audio_streams num_streams stream_to_match streams_to_remove
+	track=$1
+	# Stream #0:1(eng): Audio: aac (LC), 48000 Hz, 7.1, fltp (default)
+	# Stream #0:2(eng): Audio: aac (HE-AAC), 48000 Hz, stereo, fltp
+	audio_streams=$(get_streams "$INPUTFILE" | grep "Audio:") || fatal "No audio streams found."
+	num_streams=$(echo "$audio_streams" | wc -l)
+	echo -e "$num_streams streams found: \n$audio_streams"
+
+	if [ "$track" -ge "$num_streams" ] || [ "$track" -lt 0 ]; then
+		fatal "Invalid audio stream selected: $track. \nRemember that stream indexes start from 0"
+	fi
+
+	stream_to_match=$((track+1))
+	streams_to_remove=$(echo "$audio_streams" | grep -v -E "Stream #[0-9]+:${stream_to_match}") || fatal "Failed to resolve stream to delete"
+	delete_audio_streams "$streams_to_remove"
+}
+
+function delete_audio_track {
+	local track audio_streams num_streams stream_to_match stream_to_remove
+	track=$1
+	# Stream #0:1(eng): Audio: aac (LC), 48000 Hz, 7.1, fltp (default)
+	# Stream #0:2(eng): Audio: aac (HE-AAC), 48000 Hz, stereo, fltp
+	audio_streams=$(get_streams "$INPUTFILE" | grep "Audio:") || fatal "No audio streams found."
+	num_streams=$(echo "$audio_streams" | wc -l)
+	echo -e "$num_streams streams found: \n$audio_streams"
+
+	if [ "$track" -ge "$num_streams" ] || [ "$track" -lt 0 ]; then
+		fatal "Invalid audio stream selected: $track. \nRemember that stream indexes start from 0"
+	fi
+
+	stream_to_match=$((track+1))
+	stream_to_remove=$(echo "$audio_streams" | grep -E "Stream #[0-9]+:${stream_to_match}") || fatal "Failed to resolve stream to delete"
+	delete_audio_streams "$stream_to_remove"
+}
+
+function delete_audio_streams {
+	local streams_to_remove removal_params
+	# Stream #0:1(eng): Audio: aac (LC), 48000 Hz, 7.1, fltp (default)
+	# Stream #0:2(eng): Audio: aac (HE-AAC), 48000 Hz, stereo, fltp
+	streams_to_remove=$1
+
+	removal_params=$(echo "$streams_to_remove" | cut -d':' -f2 | cut -d'(' -f1 | awk '{print "-map -0:a:"$0-1}' | tr '\n' ' ')
+	verbose "Removal params resolved to: $removal_params"
+
+	echo -e "\nAbout to remove streams:\n$streams_to_remove\n"
+	confirm
+
+	echo ffmpeg -i "$INPUTFILE" -map 0 $removal_params -c copy "$OUTPUT_FILE"
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 $removal_params -c copy "$OUTPUT_FILE" || fatal "ffmpeg failure"
+
+	cleanup
+}
+
+function get_file_info {
+	local retcode file file_info
+	file=$1
+	file_info=$(ffprobe -analyzeduration 100000000 -probesize 100000000 -hide_banner -of csv "$file" 2>&1) || fatal "Failed to resolve file info using ffprobe. Output: \n$file_info"
+	retcode=$?
+	verbose "ffprobe result: \n$file_info"
+	echo "$file_info"
+	return "$retcode"
+}
+function get_streams {
+	get_file_info "$1" | grep "Stream #"
+}
+function cleanup {
+	if [ -n "$NO_CLEANUP" ]; then
+		echo "no-cleanup flag enabled, will not remove old file."
+		echo -e "\nOriginal file: $INPUTFILE"
+		echo -e "Modified file: $OUTPUT_FILE"
+		return 0
+	fi
+	if [ ! -f "$OUTPUT_FILE" ]; then
+		fatal "$OUTPUT_FILE does not exist. Aborting cleanup"
+	fi
 	rm -v "$INPUTFILE"
-	mv -v "$output_file" "$INPUTFILE"
+	mv -v "$OUTPUT_FILE" "$INPUTFILE"
+	echo
 }
 
 while [ $# -gt 0 ]; do
 	case $1 in
 		--set-audio-lang)
-			COMMAND=set_audio_language
+			COMMAND=$1
 			NEW_AUDIO_LANGUAGE=${2:?'--set-audio-lang requires a parameter'}
 			shift 1
 			;;
 		--output-container)
 			OUTPUT_CONTAINER=${2:?'--output-container requires a parameter'}
 			shift 1
+			;;
+		--delete-audio-track)
+			COMMAND=$1
+			track_sel=${2:?'parameter required'}
+			shift 1
+			;;
+		--delete-all-audio-tracks-except)
+			COMMAND=$1
+			track_sel=${2:?'parameter required'}
+			shift 1
+			;;
+		--no-cleanup)
+			NO_CLEANUP=true
+			;;
+		--confirm)
+			CONFIRM=true
 			;;
 		-v|--verbose)
 			VERBOSE=true
@@ -96,19 +200,21 @@ if [ -z "$OUTPUT_CONTAINER" ]; then
 	OUTPUT_CONTAINER=$INPUTFILE_EXTENSION
 fi
 
-if [ -z "$COMMAND" ] && [[ $INPUTFILE_EXTENSION != $OUTPUT_CONTAINER ]]; then
-	COMMAND=change_container
+if [ -z "$COMMAND" ] && [[ "$INPUTFILE_EXTENSION" != "$OUTPUT_CONTAINER" ]]; then
+	COMMAND="--output-container"
 fi
 
 [ -z "$COMMAND" ] && usage
 
+OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+
 echo -e "\nInputfile: $INPUTFILE"
 
 case $COMMAND in
-    set_audio_language)
-        set_audio_language "$NEW_AUDIO_LANGUAGE";;
-	change_container)
-        change_container ;;
+    --set-audio-lang) 					set_audio_language "$NEW_AUDIO_LANGUAGE" ;;
+	--output-container)					change_container "$OUTPUT_CONTAINER";;
+	--delete-audio-track)				delete_audio_track "$track_sel" ;;
+	--delete-all-audio-tracks-except)	delete_audio_tracks_except "$track_sel" ;;
 	*)
 		fatal "Unknown command: $COMMAND" ;;
 esac
