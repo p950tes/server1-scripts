@@ -214,6 +214,7 @@ done
 INPUTFILE=$1
 [ ! -f "$INPUTFILE" ] && fatal "Input file does not exist: $INPUTFILE"
 [ -z "$INPUTFILE" ] && fatal "No input file specified."
+echo -e "\nInput file: $INPUTFILE"
 
 WORKING_DIR=$(cd "$(dirname "$INPUTFILE")" && pwd)
 INPUTFILE_BASENAME=$(basename "$INPUTFILE")
@@ -233,16 +234,14 @@ fi
 [ -z "$COMMAND" ] && usage
 
 WORKING_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTAINER}"
+verbose "Working file: $WORKING_FILE"
 [ -f "$WORKING_FILE" ] && fatal "Work file already exists: $WORKING_FILE"
 
 OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
-if [[ "$INPUTFILE" != "$OUTPUT_FILE" ]] && [ -f "$OUTPUT_FILE" ]; then
+verbose "Output file: $OUTPUT_FILE"
+if [[ $CONTAINER_CHANGE != true ]] && [ -f "$OUTPUT_FILE" ]; then
 	fatal "Output file already exists: $OUTPUT_FILE"
 fi
-
-echo -e "\nInput file: $INPUTFILE"
-verbose "Output file: $OUTPUT_FILE"
-verbose "Working file: $WORKING_FILE"
 
 case $COMMAND in
     --set-audio-lang) 					set_audio_language "$NEW_AUDIO_LANGUAGE" ;;
