@@ -27,6 +27,9 @@ function confirm {
 		read -r
 	fi
 }
+function is_container_change {
+	[[ $CONTAINER_CHANGE = true ]]
+}
 
 function usage {
 	cat << EOE
@@ -61,7 +64,7 @@ function set_audio_language {
 	echo -e "Found audio stream:\n$audio_streams"
     echo -e "\nWill update stream language tag to: $language"
 
-    if [[ $CONTAINER_CHANGE = true ]]; then
+    if is_container_change; then
         extra_params="-dn -map_chapters -1"
     fi
 
@@ -239,7 +242,7 @@ verbose "Working file: $WORKING_FILE"
 
 OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
 verbose "Output file: $OUTPUT_FILE"
-if [[ $CONTAINER_CHANGE != true ]] && [ -f "$OUTPUT_FILE" ]; then
+if is_container_change && [ -f "$OUTPUT_FILE" ]; then
 	fatal "Output file already exists: $OUTPUT_FILE"
 fi
 
