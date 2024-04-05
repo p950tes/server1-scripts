@@ -236,9 +236,13 @@ WORKING_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.new.${OUTPUT_CONTA
 [ -f "$WORKING_FILE" ] && fatal "Work file already exists: $WORKING_FILE"
 
 OUTPUT_FILE="$WORKING_DIR/${INPUTFILENAME_WITHOUT_EXTENSION}.${OUTPUT_CONTAINER}"
-[ -f "$OUTPUT_FILE" ] && fatal "Output file already exists: $OUTPUT_FILE"
+if [[ "$INPUTFILE" != "$OUTPUT_FILE" ]] && [ -f "$OUTPUT_FILE" ]; then
+	fatal "Output file already exists: $OUTPUT_FILE"
+fi
 
-echo -e "\nInputfile: $INPUTFILE"
+echo -e "\nInput file: $INPUTFILE"
+verbose "Output file: $OUTPUT_FILE"
+verbose "Working file: $WORKING_FILE"
 
 case $COMMAND in
     --set-audio-lang) 					set_audio_language "$NEW_AUDIO_LANGUAGE" ;;
