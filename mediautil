@@ -30,6 +30,9 @@ function confirm {
 function is_container_change {
 	[[ $CONTAINER_CHANGE = true ]]
 }
+function is_remove_data_tracks {
+	[[ $REMOVE_DATA_TRACKS = true ]]
+}
 
 function usage {
 	cat << EOE
@@ -43,6 +46,8 @@ Operations:
   --delete-audio-track {track}
 
   --delete-audio-tracks-except {track}
+
+  --remove-data-tracks
 
 Common options:
   -v    		Verbose
@@ -64,7 +69,8 @@ function set_audio_language {
 	echo -e "Found audio stream:\n$audio_streams"
     echo -e "\nWill update stream language tag to: $language"
 
-    if is_container_change; then
+    if is_remove_data_tracks; then
+		echo "Will remove data tracks"
         extra_params="-dn -map_chapters -1"
     fi
 
@@ -80,9 +86,14 @@ function change_container {
 	# '-map_chapters -1' removes any potential chapters, which may not be supported by the target container
 	echo -e "Will change container to: $OUTPUT_CONTAINER"
 
+    if is_remove_data_tracks; then
+		echo "Will remove data tracks"
+        extra_params="-dn -map_chapters -1"
+    fi
+
 	confirm
-	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy -dn -map_chapters -1 \"$WORKING_FILE\""
-    ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy -dn -map_chapters -1 "$WORKING_FILE" || fatal "Failed to change container"
+	echo "ffmpeg -i \"$INPUTFILE\" -map 0 -c copy $extra_params \"$WORKING_FILE\""
+    ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 -c copy $extra_params "$WORKING_FILE" || fatal "Failed to change container"
 	
 	cleanup
 }
@@ -132,11 +143,16 @@ function delete_audio_streams {
 	removal_params=$(echo "$streams_to_remove" | cut -d':' -f2 | cut -d'(' -f1 | awk '{print "-map -0:a:"$0-1}' | tr '\n' ' ')
 	verbose "Removal params resolved to: $removal_params"
 
+	if is_remove_data_tracks; then
+		echo "Will remove data tracks"
+        extra_params="-dn -map_chapters -1"
+    fi
+
 	echo -e "\nAbout to remove streams:\n$streams_to_remove\n"
 	confirm
 
-	echo ffmpeg -i "$INPUTFILE" -map 0 $removal_params -c copy "$WORKING_FILE"
-	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 $removal_params -c copy "$WORKING_FILE" || fatal "ffmpeg failure"
+	echo ffmpeg -i "$INPUTFILE" -map 0 $removal_params $extra_params -c copy "$WORKING_FILE"
+	ffmpeg -nostdin -analyzeduration 100000000 -probesize 100000000 -loglevel warning -i "$INPUTFILE" -map 0 $removal_params $extra_params -c copy "$WORKING_FILE" || fatal "ffmpeg failure"
 
 	cleanup
 }
@@ -178,6 +194,9 @@ while [ $# -gt 1 ]; do
 		--output-container)
 			OUTPUT_CONTAINER=${2:?'--output-container requires a parameter'}
 			shift 1
+			;;
+		--remove-data)
+			REMOVE_DATA_TRACKS=true
 			;;
 		--delete-audio-track)
 			COMMAND=$1
