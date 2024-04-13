@@ -232,11 +232,11 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream', type=int)
     argparser.add_argument('--delete-audio-streams-except', metavar='stream', help='Deletes all audio streams except the one specified', type=int)
     argparser.add_argument('--delete-data-streams', help='Deletes the specified audio stream', action='store_true')
-    argparser.add_argument('--delete-subtitles', dest='delete_subs', help='Deletes all subtitle streams', action='store_true')
-    argparser.add_argument('--extract-subtitles', dest='extract_subs', help='Extract all subtitle streams', action='store_true')
-    argparser.add_argument('-eds', '--extract-and-delete-subtitles', dest='extract_and_delete_subs', help='Extract and delete all subtitle streams', action='store_true')
+    argparser.add_argument('--delete-subs', dest='delete_subs', help='Deletes all subtitle streams', action='store_true')
+    argparser.add_argument('--extract-subs', dest='extract_subs', help='Extract all subtitle streams', action='store_true')
+    argparser.add_argument('-eds', '--extract-and-delete-subs', dest='extract_and_delete_subs', help='Extract and delete all subtitle streams', action='store_true')
 
-    argparser.add_argument('--create-dir', action='store_true', help='Store the output in a directory with the same name as the input file')
+    argparser.add_argument('-d', '--create-dir', action='store_true', help='Store the output in a directory with the same name as the input file')
     argparser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode')
     argparser.add_argument('--dry-run', '--nono', action='store_true', help='Make no changes')
     argparser.add_argument('--no-confirm', dest='confirm', action='store_false', help='Disables confirmation dialog before executing')
@@ -263,7 +263,7 @@ def extract_subtitles(input_file: MediaFile, destination_dir: str):
     for subtitle in subtitle_streams:
         output_file = resolve_new_subtitle_file_path(subtitle, inputfilename_without_extension, destination_dir)
 
-        verbose("Extracting subtitle: " + str(subtitle))
+        print("Extracting subtitle: " + str(subtitle))
         executor = FfmpegExecutor(input_file.path)
         executor.add_args(['-map', '0:' + str(subtitle.index)])
         executor.add_args(['-c', 'srt'])
@@ -328,7 +328,7 @@ def process_file(input_file_path: str) -> None:
     executor.add_args(['-map', '0'])
 
     if ARGS.extract_subs:
-        action_list.append("* Will extract all subtitles\n")
+        action_list.append(" * Will extract all subtitles")
 
     if ARGS.set_stream_language:
         num_actions += 1
@@ -342,8 +342,8 @@ def process_file(input_file_path: str) -> None:
         
         executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
         
-        action_list.append("* Will update the following stream language to '" + new_language + "'\n"
-                            + "   " + str(stream_to_modify) + "\n")
+        action_list.append(" * Will update the following stream language to '" + new_language + "'"
+                            + "   " + str(stream_to_modify))
 
     if ARGS.delete_stream != None:
         num_actions += 1
@@ -351,8 +351,8 @@ def process_file(input_file_path: str) -> None:
             fatal("Stream index not found: " + str(ARGS.delete_stream))
         stream_to_delete = input_file.streams[ARGS.delete_stream]
         executor.add_args(['-map', '-0:' + str(stream_to_delete.index)])
-        action_list.append("* Will delete the following stream:\n" 
-                           + "   " + str(stream_to_delete) + "\n")
+        action_list.append(" * Will delete the following stream:" 
+                           + "   " + str(stream_to_delete))
         
     if ARGS.delete_audio_streams_except != None:
         num_actions += 1
@@ -360,20 +360,20 @@ def process_file(input_file_path: str) -> None:
             fatal("Audio stream index not found: " + str(ARGS.delete_audio_streams_except))
         
         audio_streams_to_delete = [stream for stream in input_file.audio_streams if stream.index != ARGS.delete_audio_streams_except]
-        action_list.append("* Will delete the following audio streams:")
+        action_list.append(" * Will delete the following audio streams:")
         for stream in audio_streams_to_delete:
-            action_list.append("   " + str(stream) + "\n")
+            action_list.append("   " + str(stream))
             executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_data_streams:
         num_actions += 1
-        action_list.append("* Will delete data streams\n")
+        action_list.append(" * Will delete data streams")
         executor.add_args(['-dn'])
         executor.add_args(['-map_chapters', '-1'])
 
     if ARGS.delete_subs:
         num_actions += 1
-        action_list.append("* Will delete all subtitle streams\n")
+        action_list.append(" * Will delete all subtitle streams")
         executor.add_arg('-sn')
 
     executor.add_arg(working_file)
@@ -382,8 +382,17 @@ def process_file(input_file_path: str) -> None:
         verbose("No actions specified")
         return
     
-    print("\nACTIONS:\n")
+    print("\nACTIONS:")
     [print(action) for action in action_list]
+
+    option_list = []
+    if ARGS.dry_run:     option_list.append(" * Dry-run mode, will not perform any actions")
+    if ARGS.create_dir:  option_list.append(" * Will create a new directory with the same name as the video file") 
+    if not ARGS.cleanup: option_list.append(" * Cleanup disabled, will leave the source file behind, unmodified")
+
+    if option_list:
+        print("\nOPTIONS:")
+        [print(option) for option in option_list]
 
     confirm()
 
@@ -398,6 +407,7 @@ def process_file(input_file_path: str) -> None:
         # the only action was to extract subs
         return
     
+    print("Performing selected actions on source file")
     returncode = executor.execute()
 
     if returncode != 0:
