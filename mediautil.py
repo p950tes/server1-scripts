@@ -232,8 +232,9 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream', type=int)
     argparser.add_argument('--delete-audio-streams-except', metavar='stream', help='Deletes all audio streams except the one specified', type=int)
     argparser.add_argument('--delete-data-streams', help='Deletes the specified audio stream', action='store_true')
-    argparser.add_argument('--delete-subs', '--delete-subtitles', dest='delete_subs', help='Deletes all subtitle streams', action='store_true')
-    argparser.add_argument('--extract-subs', '--extract-subtitles', dest='extract_subs', help='Extract all subtitle streams', action='store_true')
+    argparser.add_argument('--delete-subtitles', dest='delete_subs', help='Deletes all subtitle streams', action='store_true')
+    argparser.add_argument('--extract-subtitles', dest='extract_subs', help='Extract all subtitle streams', action='store_true')
+    argparser.add_argument('-eds', '--extract-and-delete-subtitles', dest='extract_and_delete_subs', help='Extract and delete all subtitle streams', action='store_true')
 
     argparser.add_argument('--create-dir', action='store_true', help='Store the output in a directory with the same name as the input file')
     argparser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode')
@@ -241,7 +242,11 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--no-confirm', dest='confirm', action='store_false', help='Disables confirmation dialog before executing')
     argparser.add_argument('--no-cleanup', dest='cleanup', action='store_false', help='Disables cleanup of old file')
 
-    return argparser.parse_args()
+    args = argparser.parse_args()
+    if args.extract_and_delete_subs:
+        args.extract_subs = True
+        args.delete_subs = True
+    return args
 
 def extract_subtitles(input_file: MediaFile, destination_dir: str):
     subtitle_streams = input_file.get_subtitle_streams()
