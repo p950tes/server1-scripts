@@ -29,8 +29,9 @@ def verbose(*args, **kwargs) -> None:
         print(*args, file=sys.stderr, **kwargs)
 
 def confirm() -> None:
+    print()
     if ARGS.confirm:
-        input('\nPress ENTER to continue or CTRL-C to abort\n')
+        input('Press ENTER to continue or CTRL-C to abort\n')
 
 def format_bytes(size: int, decimal_places=2) -> str:
     for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
