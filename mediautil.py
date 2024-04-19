@@ -121,7 +121,7 @@ class Stream:
     def is_hearing_impaired(self) -> bool:
         return self.__has_disposition('hearing_impaired')
     def is_image_based_subtitle(self) -> bool:
-        return self.raw.get('codec_name') in ['dvd_subtitle', 'dvb_subtitle', 'pgs_subtitle']
+        return self.raw.get('codec_name') in ['dvd_subtitle', 'dvb_subtitle', 'pgs_subtitle', 'hdmv_pgs_subtitle']
 
     def __str__(self) -> str:
         result = list()
