@@ -251,11 +251,11 @@ def parse_args() -> argparse.Namespace:
 def extract_subtitles(input_file: MediaFile, destination_dir: str):
     subtitle_streams = input_file.get_subtitle_streams()
     if not subtitle_streams:
-        print_error("No subtitle streams present")
+        print("WARNING: No subtitle streams present")
         return
     subtitle_streams = [stream for stream in subtitle_streams if not stream.is_image_based_subtitle()]
     if not subtitle_streams:
-        print_error("Only image based subtitle streams present, will not extract any subtitles")
+        print("WARNING: Only image based subtitle streams present, will not extract any subtitles")
         return
 
     inputfilename_without_extension = Path(input_file.path).stem
