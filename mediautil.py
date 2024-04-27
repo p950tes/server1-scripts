@@ -82,8 +82,7 @@ class Stream:
     type: str
     index: int
     raw: dict
-    language: str
-    title: str
+    language: str = "unknown"
 
     def __init__(self, raw: dict):
         self.type = raw.get("codec_type")
@@ -99,11 +98,8 @@ class Stream:
         return value > 0
     
     def __parse_tags(self, tags: dict) -> None:
-        self.language = tags.get('language')
-        if not self.language:
-            self.language = "unknown"
-
-        self.title = tags.get('title')
+        if tags.get('language'):
+            self.language = tags.get('language')
     
     def get_size_in_bytes(self) -> int:
         if 'tags' not in self.raw:
@@ -114,6 +110,11 @@ class Stream:
             return int(tags.get(numbytes_tags[0]))
         else:
             return None
+
+    def get_title(self) -> str:
+        if 'tags' not in self.raw:
+            return None
+        return self.raw['tags'].get('title')
     
     def is_default(self) -> bool:
         return self.__has_disposition('default')
@@ -145,8 +146,8 @@ class Stream:
         if num_bytes:
             result.append(format_bytes(num_bytes))
         
-        if self.title:
-            result.append("'" + self.title + "'")
+        if self.get_title():
+            result.append("'" + self.get_title() + "'")
         
         if self.is_default():
             result.append("(default)")
