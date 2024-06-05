@@ -179,6 +179,9 @@ function scrub_subtitle {
 	input=$1
 	echo "Scrubbing subtitle: $input"
 	
+	# Converting to unix format
+	dos2unix -q "$input"
+
 	# Remove ASS subtitle leftovers: {\an2}
 	sed -i -E 's/\{\\[^\}]+\}//g' "$input"
 
@@ -193,6 +196,9 @@ function scrub_subtitle {
 
 	# Remove Capitals followed by colon: SIMON SAYS: 
 	sed -i -z -E 's/[A-Z]{2}+[A-Z0-9 ]*\s?: *\n?//g' "$input"
+
+	# Remove lines with all caps: 
+	sed -i -E 's/^[A-Z ,\!]+$//g' "$input"
 }
 
 while [ $# -gt 0 ]; do
