@@ -358,7 +358,7 @@ def process_file(input_file_path: str) -> None:
         
     if ARGS.delete_audio_streams_except != None:
         num_actions += 1
-        if ARGS.delete_audio_streams_except >= len(input_file.get_audio_streams()):
+        if ARGS.delete_audio_streams_except > len(input_file.get_audio_streams()):
             fatal("Audio stream index not found: " + str(ARGS.delete_audio_streams_except))
         
         audio_streams_to_delete = [stream for stream in input_file.get_audio_streams() if stream.index != ARGS.delete_audio_streams_except]
