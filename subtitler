@@ -199,6 +199,10 @@ function scrub_subtitle {
 
 	# Remove lines with all caps: 
 	sed -i -E 's/^[A-Z ,\!]+$//g' "$input"
+
+	# Remove music junk: 
+	sed -i -E 's/^([jJ]“)+\s*//g' "$input"
+	sed -i -E 's/([jJ]“)+$//g' "$input"
 }
 
 while [ $# -gt 0 ]; do
