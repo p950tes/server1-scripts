@@ -342,7 +342,7 @@ def process_file(input_file_path: str) -> None:
         if image_based_subs:
             action_list.append("   WARNING: The following subtitles are image based and will not be extracted:")
             for sub in image_based_subs:
-                action_list.append("     - " + str(sub))
+                action_list.append("    - " + str(sub))
 
     if ARGS.set_stream_language:
         num_actions += 1
