@@ -83,6 +83,7 @@ class Stream:
     index: int
     raw: dict
     language: str = "unknown"
+    title: str = ""
 
     def __init__(self, raw: dict):
         self.type = raw.get("codec_type")
@@ -100,6 +101,8 @@ class Stream:
     def __parse_tags(self, tags: dict) -> None:
         if tags.get('language'):
             self.language = tags.get('language')
+        if tags.get('title'):
+            self.title = tags.get('title')
     
     def get_size_in_bytes(self) -> int:
         if 'tags' not in self.raw:
@@ -110,26 +113,30 @@ class Stream:
             return int(tags.get(numbytes_tags[0]))
         else:
             return None
-
-    def get_title(self) -> str:
-        if 'tags' not in self.raw:
-            return None
-        return self.raw['tags'].get('title')
+    
+    def is_video(self) -> bool:
+        return self.type == 'video'
+    def is_audio(self) -> bool:
+        return self.type == 'audio'
+    def is_subtitle(self) -> bool:
+        return self.type == 'subtitle'
+    def is_unknown_type(self) -> bool:
+        return self.type not in ['video', 'audio', 'subtitle']
     
     def is_default(self) -> bool:
         return self.__has_disposition('default')
     def is_forced(self) -> bool:
-        return self.__has_disposition('forced')
+        return self.__has_disposition('forced') or "FORCED" in self.title.upper()
     def is_hearing_impaired(self) -> bool:
-        return self.__has_disposition('hearing_impaired')
+        return self.__has_disposition('hearing_impaired') or "SDH" in self.title.upper()
     def is_image_based_subtitle(self) -> bool:
-        return self.raw.get('codec_name') in ['dvd_subtitle', 'dvb_subtitle', 'pgs_subtitle', 'hdmv_pgs_subtitle']
+        return self.is_subtitle() and self.raw.get('codec_name') in ['dvd_subtitle', 'dvb_subtitle', 'pgs_subtitle', 'hdmv_pgs_subtitle']
 
     def __str__(self) -> str:
         result = list()
         result.append("Stream #" + str(self.index))
         result.append(self.type)
-        if self.type != 'video':
+        if self.language and not self.is_video():
             result.append("(" + self.language + ")")
         
         result.append(self.raw.get('codec_name'))
@@ -146,8 +153,8 @@ class Stream:
         if num_bytes:
             result.append(format_bytes(num_bytes))
         
-        if self.get_title():
-            result.append("'" + self.get_title() + "'")
+        if self.title:
+            result.append("'" + self.title + "'")
         
         if self.is_default():
             result.append("(default)")
@@ -172,13 +179,13 @@ class MediaFile:
         self.streams = streams
     
     def get_video_streams(self) -> Stream:
-        return [stream for stream in self.streams if stream.type == 'video']
+        return [stream for stream in self.streams if stream.is_video()]
     def get_audio_streams(self) -> Stream:
-        return [stream for stream in self.streams if stream.type == 'audio']
+        return [stream for stream in self.streams if stream.is_audio()]
     def get_subtitle_streams(self) -> Stream:
-        return [stream for stream in self.streams if stream.type == 'subtitle']
+        return [stream for stream in self.streams if stream.is_subtitle()]
     def get_other_streams(self) -> Stream:
-        return [stream for stream in self.streams if stream.type not in ['video', 'audio', 'subtitle']]
+        return [stream for stream in self.streams if stream.is_unknown_type()]
 
     def __str__(self) -> str:
         video_streams = self.get_video_streams()
@@ -277,7 +284,7 @@ def extract_subtitles(input_file: MediaFile, destination_dir: str):
 def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir: str) -> str:
     language_str = subtitle.language
     if subtitle.is_hearing_impaired():
-        language_str += ".hi"
+        language_str += ".sdh"
     if subtitle.is_forced():
         language_str += ".forced"
 
