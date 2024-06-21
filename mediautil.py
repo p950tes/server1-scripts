@@ -331,6 +331,11 @@ def process_file(input_file_path: str) -> None:
 
     if ARGS.extract_subs:
         action_list.append(" * Will extract all subtitles")
+        image_based_subs = [stream for stream in input_file.get_subtitle_streams() if stream.is_image_based_subtitle()]
+        if image_based_subs:
+            action_list.append("   WARNING: The following subtitles are image based and will not be extracted:")
+            for sub in image_based_subs:
+                action_list.append("     - " + str(sub))
 
     if ARGS.set_stream_language:
         num_actions += 1
