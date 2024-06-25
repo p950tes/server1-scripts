@@ -72,11 +72,11 @@ case "$1" in
 		add_trackers "$2" 
 		;;
 	status) 
-		sudo systemctl status transmission-openvpn
+		sudo systemctl status transmission-openvpn --no-pager -l
 		;;
 	start|stop|restart) 
 		sudo systemctl "$1" transmission-openvpn
-		sudo systemctl status transmission-openvpn
+		sudo systemctl status transmission-openvpn --no-pager -l
 		;;
 	log)
 		journalctl -e -o short-iso -u transmission-openvpn
