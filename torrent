@@ -75,6 +75,7 @@ case "$1" in
 		sudo systemctl status transmission-openvpn --no-pager -l
 		;;
 	start|stop|restart) 
+		echo sudo systemctl "$1" transmission-openvpn
 		sudo systemctl "$1" transmission-openvpn
 		sudo systemctl status transmission-openvpn --no-pager -l
 		;;
