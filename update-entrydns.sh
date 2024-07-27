@@ -32,7 +32,14 @@ function perform_update {
         return 0
     else
         log "Entrydns update failed: $res"
-        return 1
+        log "Retrying once"
+        if res=$(curl -v --no-progress-meter -X PUT "https://entrydns.net/records/modify/$AUTHENTICATION_TOKEN" 2>&1); then
+            log "Second attempt successful: $res"
+            return 0
+        else
+            log "Second attempt also failed: $res"
+            return 1
+        fi
     fi
 }
 function resolve_auth_token {
