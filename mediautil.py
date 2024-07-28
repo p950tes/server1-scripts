@@ -255,6 +255,10 @@ def parse_args() -> argparse.Namespace:
     if args.extract_and_delete_subs:
         args.extract_subs = True
         args.delete_subs = True
+    
+    if args.dry_run:
+        args.confirm = False
+
     return args
 
 def extract_subtitles(input_file: MediaFile, destination_dir: str):
@@ -345,7 +349,6 @@ def process_file(input_file_path: str) -> None:
                 action_list.append("    - " + str(sub))
 
     if ARGS.set_stream_language:
-        num_actions += 1
         stream_index = int(ARGS.set_stream_language[0])
         new_language = ARGS.set_stream_language[1]
         if stream_index >= len(input_file.streams):
@@ -354,30 +357,33 @@ def process_file(input_file_path: str) -> None:
         if stream_to_modify.language == new_language:
             fatal("The specified stream already has '" + new_language + "' set as language: \n" + str(stream_to_modify))
         
+        num_actions += 1
+
         executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
         
         action_list.append(" * Will update the following stream language to '" + new_language + "'"
                             + "   " + str(stream_to_modify))
 
     if ARGS.delete_stream != None:
-        num_actions += 1
         if ARGS.delete_stream >= len(input_file.streams):
             fatal("Stream index not found: " + str(ARGS.delete_stream))
+        num_actions += 1
         stream_to_delete = input_file.streams[ARGS.delete_stream]
         executor.add_args(['-map', '-0:' + str(stream_to_delete.index)])
         action_list.append(" * Will delete the following stream:" 
                            + "   " + str(stream_to_delete))
         
     if ARGS.delete_audio_streams_except != None:
-        num_actions += 1
         if ARGS.delete_audio_streams_except > len(input_file.get_audio_streams()):
             fatal("Audio stream index not found: " + str(ARGS.delete_audio_streams_except))
         
         audio_streams_to_delete = [stream for stream in input_file.get_audio_streams() if stream.index != ARGS.delete_audio_streams_except]
-        action_list.append(" * Will delete the following audio streams:")
-        for stream in audio_streams_to_delete:
-            action_list.append("   " + str(stream))
-            executor.add_args(['-map', '-0:' + str(stream.index)])
+        if audio_streams_to_delete:
+            num_actions += 1
+            action_list.append(" * Will delete the following audio streams:")
+            for stream in audio_streams_to_delete:
+                action_list.append("   " + str(stream))
+                executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_data_streams:
         num_actions += 1
@@ -386,9 +392,12 @@ def process_file(input_file_path: str) -> None:
         executor.add_args(['-map_chapters', '-1'])
 
     if ARGS.delete_subs:
-        num_actions += 1
-        action_list.append(" * Will delete all subtitle streams")
-        executor.add_arg('-sn')
+        if len(input_file.get_subtitle_streams()) > 0:
+            num_actions += 1
+            action_list.append(" * Will delete all subtitle streams")
+            executor.add_arg('-sn')
+        else:
+            action_list.append(" * Requested deletion of all subtitle streams but none exists")
 
     executor.add_arg(working_file)
 
