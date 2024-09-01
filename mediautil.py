@@ -11,6 +11,16 @@ import threading
 
 signal.signal(signal.SIGINT, lambda sig, frame : sys.exit(1))
 
+# Specify how many microseconds are analyzed to probe the input. 
+# A higher value will enable detecting more accurate information, but will increase latency. 
+# It defaults to 5,000,000 microseconds = 5 seconds.
+FFMPEG_ANALYZEDURATION=str(100_000_000)
+
+# Set probing size in bytes, i.e. the size of the data to analyze to get stream information. 
+# A higher value will enable detecting more information in case it is dispersed into the stream, but will increase latency. 
+# Must be an integer not lesser than 32. It is 5000000 by default.
+FFMPEG_PROBESIZE=str(100_000_000)
+
 def is_valid_file(parser, arg) -> str:
     if os.path.isfile(arg):
         return arg
@@ -48,8 +58,8 @@ class FfmpegExecutor:
         if not ARGS.verbose:
             self.args.extend(['-loglevel', 'warning'])
         self.args.extend(['-nostdin', '-hide_banner'])
-        self.args.extend(['-analyzeduration', '100000000'])
-        self.args.extend(['-probesize', '100000000'])
+        self.args.extend(['-analyzeduration', FFMPEG_ANALYZEDURATION])
+        self.args.extend(['-probesize', FFMPEG_PROBESIZE])
         self.args.extend(['-i', input_file_path])
     
     def add_arg(self, argument: str) -> None:
@@ -206,7 +216,7 @@ class MediaFile:
 
 def parse_mediafile(filepath: str) -> MediaFile:
     cmd = ['ffprobe', '-hide_banner']
-    cmd.extend(['-analyzeduration', '100000000', '-probesize', '100000000'])
+    cmd.extend(['-analyzeduration', FFMPEG_ANALYZEDURATION, '-probesize', FFMPEG_PROBESIZE])
     cmd.extend(['-of', 'json'])
     cmd.extend(['-show_streams', '-show_format'])
     cmd.extend([filepath])
@@ -382,7 +392,7 @@ def process_file(input_file_path: str) -> None:
             num_actions += 1
             action_list.append(" * Will delete the following audio streams:")
             for stream in audio_streams_to_delete:
-                action_list.append("   " + str(stream))
+                action_list.append("    - " + str(stream))
                 executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_data_streams:
