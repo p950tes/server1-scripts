@@ -90,6 +90,7 @@ class FfmpegExecutor:
 
 class Stream:
     type: str
+    codec_name: str
     index: int
     raw: dict
     language: str = "unknown"
@@ -97,6 +98,7 @@ class Stream:
 
     def __init__(self, raw: dict):
         self.type = raw.get("codec_type")
+        self.codec_name = raw.get("codec_name")
         self.index = int(raw.get("index"))
         self.raw = raw
         if 'tags' in raw:
@@ -132,6 +134,9 @@ class Stream:
         return self.type == 'subtitle'
     def is_unknown_type(self) -> bool:
         return self.type not in ['video', 'audio', 'subtitle']
+    
+    def is_image(self) -> bool:
+        return self.codec_name in ['mjpeg']
     
     def is_default(self) -> bool:
         return self.__has_disposition('default')
@@ -250,7 +255,8 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--output-container', dest='output_container', help='Specify a new output container')
     argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream', type=int)
     argparser.add_argument('--delete-audio-streams-except', metavar='stream', help='Deletes all audio streams except the one specified', type=int)
-    argparser.add_argument('--delete-data-streams', help='Deletes the specified audio stream', action='store_true')
+    argparser.add_argument('--delete-data-streams', help='Deletes all data streams', action='store_true')
+    argparser.add_argument('--delete-image-streams', help='Deletes all image streams', action='store_true')
     argparser.add_argument('--delete-subs', dest='delete_subs', help='Deletes all subtitle streams', action='store_true')
     argparser.add_argument('--extract-subs', dest='extract_subs', help='Extract all subtitle streams', action='store_true')
     argparser.add_argument('-eds', '--extract-and-delete-subs', dest='extract_and_delete_subs', help='Extract and delete all subtitle streams', action='store_true')
@@ -326,29 +332,16 @@ def process_file(input_file_path: str) -> None:
 
     container_change = input_file.container != output_container
 
-    inputfilename_without_extension = Path(input_file.path).stem
-    working_dir = os.path.dirname(os.path.abspath(input_file.path))
-    if ARGS.create_dir:
-        working_dir = working_dir + "/" + inputfilename_without_extension
-
-    working_file = working_dir + "/" + inputfilename_without_extension + ".new." + output_container
-    verbose("Source file     : " + input_file.path)
-    verbose("Working file    : " + working_file)
-    if os.path.exists(working_file):
-        fatal("Working file already exists: " + working_file)
-
-    output_file = working_dir + "/" + inputfilename_without_extension + "." + output_container
-    verbose("Destination file: " + output_file)
-
-    if container_change and os.path.exists(output_file):
-        fatal("Output file already exists: " + output_file)
-
     num_actions = 0
     action_list = list()
 
     executor = FfmpegExecutor(input_file.path)
     executor.add_args(['-c', 'copy'])
     executor.add_args(['-map', '0'])
+
+    if container_change:
+        num_actions += 1
+        action_list.append(" * Will change container from " + input_file.container + " to " + output_container)
 
     if ARGS.extract_subs:
         action_list.append(" * Will extract all subtitles")
@@ -368,11 +361,9 @@ def process_file(input_file_path: str) -> None:
             fatal("The specified stream already has '" + new_language + "' set as language: \n" + str(stream_to_modify))
         
         num_actions += 1
-
-        executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
+        action_list.append(" * Will update the following stream language to '" + new_language + "'" + "   " + str(stream_to_modify))
         
-        action_list.append(" * Will update the following stream language to '" + new_language + "'"
-                            + "   " + str(stream_to_modify))
+        executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
 
     if ARGS.delete_stream != None:
         if ARGS.delete_stream >= len(input_file.streams):
@@ -395,6 +386,15 @@ def process_file(input_file_path: str) -> None:
                 action_list.append("    - " + str(stream))
                 executor.add_args(['-map', '-0:' + str(stream.index)])
 
+    if ARGS.delete_image_streams:
+        image_streams_to_delete = [stream for stream in input_file.get_video_streams() if stream.is_image()]
+        if image_streams_to_delete:
+            num_actions += 1
+            action_list.append(" * Will delete the following image video streams:")
+            for stream in image_streams_to_delete:
+                action_list.append("    - " + str(stream))
+                executor.add_args(['-map', '-0:' + str(stream.index)])
+
     if ARGS.delete_data_streams:
         num_actions += 1
         action_list.append(" * Will delete data streams")
@@ -408,8 +408,6 @@ def process_file(input_file_path: str) -> None:
             executor.add_arg('-sn')
         else:
             action_list.append(" * Requested deletion of all subtitle streams but none exists")
-
-    executor.add_arg(working_file)
 
     if not action_list:
         verbose("No actions specified")
@@ -429,6 +427,24 @@ def process_file(input_file_path: str) -> None:
 
     confirm()
 
+    inputfilename_without_extension = Path(input_file.path).stem
+    
+    working_dir = os.path.dirname(os.path.abspath(input_file.path))
+    if ARGS.create_dir:
+        working_dir = working_dir + "/" + inputfilename_without_extension
+
+    working_file = working_dir + "/" + inputfilename_without_extension + ".new." + output_container
+    verbose("Working file    : " + working_file)
+    if os.path.exists(working_file):
+        fatal("Working file already exists: " + working_file)
+
+    output_file = working_dir + "/" + inputfilename_without_extension + "." + output_container
+    verbose("Destination file: " + output_file)
+
+    if container_change and os.path.exists(output_file):
+        fatal("Output file already exists: " + output_file)
+
+
     if not os.path.exists(working_dir) and not ARGS.dry_run:
         verbose("Creating working dir: " + working_dir)
         os.makedirs(working_dir)
@@ -441,6 +457,7 @@ def process_file(input_file_path: str) -> None:
         return
     
     print("Performing selected actions on source file")
+    executor.add_arg(working_file)
     returncode = executor.execute()
 
     if returncode != 0:
