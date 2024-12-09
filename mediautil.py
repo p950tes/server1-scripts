@@ -93,8 +93,11 @@ class Stream:
     codec_name: str
     index: int
     raw: dict
+    tags: dict = dict()
     language: str = "unknown"
     title: str = ""
+    filename: str = ""
+    mimetype: str = ""
 
     def __init__(self, raw: dict):
         self.type = raw.get("codec_type")
@@ -111,10 +114,15 @@ class Stream:
         return value > 0
     
     def __parse_tags(self, tags: dict) -> None:
+        self.tags = tags
         if tags.get('language'):
             self.language = tags.get('language')
         if tags.get('title'):
             self.title = tags.get('title')
+        if tags.get('filename'):
+            self.filename = tags.get('filename')
+        if tags.get('mimetype'):
+            self.mimetype = tags.get('mimetype')
     
     def get_size_in_bytes(self) -> int:
         if 'tags' not in self.raw:
@@ -151,10 +159,12 @@ class Stream:
         result = list()
         result.append("Stream #" + str(self.index))
         result.append(self.type)
-        if self.language and not self.is_video():
+        if self.language and (self.is_audio() or self.is_subtitle()):
             result.append("(" + self.language + ")")
         
-        result.append(self.raw.get('codec_name'))
+        if self.codec_name:
+                result.append(self.codec_name)
+        
         if self.raw.get('profile'):
             result.append("(" + self.raw.get('profile') + ")")
 
@@ -171,6 +181,11 @@ class Stream:
         if self.title:
             result.append("'" + self.title + "'")
         
+        if self.filename:
+            result.append("'" + self.filename + "'")
+        if self.mimetype:
+            result.append("(" + self.mimetype + ")")
+
         if self.is_default():
             result.append("(default)")
         if self.is_forced():
@@ -253,7 +268,7 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--list', action='store_true', help='Prints information about the specified file')
     argparser.add_argument('--set-stream-language', nargs=2, metavar=('STREAM', 'LANGUAGE'), help='Sets stream language to the specified language')
     argparser.add_argument('--output-container', dest='output_container', help='Specify a new output container')
-    argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream', type=int)
+    argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream')
     argparser.add_argument('--delete-audio-streams-except', metavar='stream', help='Deletes all audio streams except the one specified', type=int)
     argparser.add_argument('--delete-data-streams', help='Deletes all data streams', action='store_true')
     argparser.add_argument('--delete-image-streams', help='Deletes all image streams', action='store_true')
@@ -275,6 +290,12 @@ def parse_args() -> argparse.Namespace:
     if args.dry_run:
         args.confirm = False
 
+    if args.delete_stream:
+        if "," in args.delete_stream:
+            args.delete_stream = list(map(int, args.delete_stream.split(",")))
+        else:
+            args.delete_stream = [args.delete_stream]
+    
     return args
 
 def extract_subtitles(input_file: MediaFile, destination_dir: str):
@@ -366,13 +387,13 @@ def process_file(input_file_path: str) -> None:
         executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
 
     if ARGS.delete_stream != None:
-        if ARGS.delete_stream >= len(input_file.streams):
-            fatal("Stream index not found: " + str(ARGS.delete_stream))
-        num_actions += 1
-        stream_to_delete = input_file.streams[ARGS.delete_stream]
-        executor.add_args(['-map', '-0:' + str(stream_to_delete.index)])
-        action_list.append(" * Will delete the following stream:" 
-                           + "   " + str(stream_to_delete))
+        for index in ARGS.delete_stream:
+            if index >= len(input_file.streams):
+                fatal("Stream index not found: " + str(index))
+            num_actions += 1
+            stream_to_delete = input_file.streams[index]
+            executor.add_args(['-map', '-0:' + str(stream_to_delete.index)])
+            action_list.append(" * Will delete the following stream:" + "   " + str(stream_to_delete))
         
     if ARGS.delete_audio_streams_except != None:
         if ARGS.delete_audio_streams_except > len(input_file.get_audio_streams()):
