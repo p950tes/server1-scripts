@@ -144,7 +144,7 @@ class Stream:
         return self.type not in ['video', 'audio', 'subtitle']
     
     def is_image(self) -> bool:
-        return self.codec_name in ['mjpeg']
+        return self.codec_name in ['mjpeg', 'png']
     
     def is_default(self) -> bool:
         return self.__has_disposition('default')
