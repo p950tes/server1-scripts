@@ -379,12 +379,11 @@ def process_file(input_file_path: str) -> None:
             fatal("Stream index not found: " + str(ARGS.stream_index))
         stream_to_modify = input_file.streams[stream_index]
         if stream_to_modify.language == new_language:
-            fatal("The specified stream already has '" + new_language + "' set as language: \n" + str(stream_to_modify))
-        
-        num_actions += 1
-        action_list.append(" * Will update the following stream language to '" + new_language + "'" + "   " + str(stream_to_modify))
-        
-        executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
+            print("WARNING: The specified stream already has '" + new_language + "' set as language: \n" + str(stream_to_modify))
+        else:
+            num_actions += 1
+            action_list.append(" * Will update the following stream language to '" + new_language + "'" + "   " + str(stream_to_modify))        
+            executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
 
     if ARGS.delete_stream != None:
         for index in ARGS.delete_stream:
