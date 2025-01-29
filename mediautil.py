@@ -294,7 +294,7 @@ def parse_args() -> argparse.Namespace:
         if "," in args.delete_stream:
             args.delete_stream = list(map(int, args.delete_stream.split(",")))
         else:
-            args.delete_stream = [args.delete_stream]
+            args.delete_stream = [int(args.delete_stream)]
     
     return args
 
