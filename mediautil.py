@@ -416,10 +416,11 @@ def process_file(input_file_path: str) -> None:
                 executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_data_streams:
-        num_actions += 1
-        action_list.append(" * Will delete data streams")
-        executor.add_args(['-dn'])
-        executor.add_args(['-map_chapters', '-1'])
+        if input_file.get_other_streams():
+            num_actions += 1
+            action_list.append(" * Will delete data streams")
+            executor.add_args(['-dn'])
+            executor.add_args(['-map_chapters', '-1'])
 
     if ARGS.delete_subs:
         if len(input_file.get_subtitle_streams()) > 0:
