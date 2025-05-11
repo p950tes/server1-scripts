@@ -45,7 +45,8 @@ function remove_torrent {
 	fi
 }
 function enter_container {
-	local container_id=$(docker ps --filter "name=transmission-openvpn" -q)
+	local container_id
+	container_id=$(docker ps --filter "name=transmission-openvpn" -q)
 	if [ -z "$container_id" ]; then
 		echo "No running container found"
 		exit 1
@@ -56,6 +57,17 @@ function enter_container {
 function update_container {
 	echo "docker-compose --project-directory /etc/openvpn/docker up -d"
 	docker-compose --project-directory "/etc/openvpn/docker" up -d
+}
+
+function add_public_trackers {
+	local url trackers
+	url="https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
+	if ! trackers=$(curl --no-progress-meter "$url"); then
+    	>&2 echo "Failed to download trackers"
+    	return 1
+	fi
+	echo -e "Adding the following trackers to all torrents:\n$(echo "$trackers" | grep -v '^$')\n"
+	add_trackers "$trackers"
 }
 
 case "$1" in
@@ -70,6 +82,9 @@ case "$1" in
 		;;
 	addtracker)
 		add_trackers "$2" 
+		;;
+	add-public-trackers)
+		add_public_trackers
 		;;
 	status) 
 		sudo systemctl status transmission-openvpn --no-pager -l
