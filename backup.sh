@@ -1,4 +1,5 @@
 #! /bin/bash
+# shellcheck disable=SC2181
 
 BACKUPDISK="/mnt/backup-disk"
 BACKUPDIR="$BACKUPDISK/backup/"
@@ -47,7 +48,7 @@ function validateDirectory {
 }
 
 function addModifier {
-	if [ ! -z "$MODIFIERS" ]; then
+	if [ -n "$MODIFIERS" ]; then
 		MODIFIERS+=" "
 	fi
 	MODIFIERS+="$1"
@@ -83,8 +84,8 @@ function unmountBackup {
 }
 function confirm {
 	response="no"
-	while [ ! -z "$response" ]; do
-		read -p "Press [Enter] to continue. " response
+	while [ -n "$response" ]; do
+		read -r -p "Press [Enter] to continue. " response
 	done
 }
 
@@ -131,8 +132,8 @@ verifyBackup
 
 backup_disk_size=$(getBackupDiskSize)
 size_before=$(getBackupSize)
-echo -e "\nTotal backup size before backup: $(formatBytes $size_before) / $(formatBytes $backup_disk_size)"
-echo -e "Available space: $(formatBytes $(getBackupAvailableDiskSpace))\n"
+echo -e "\nTotal backup size before backup: $(formatBytes "$size_before") / $(formatBytes "$backup_disk_size")"
+echo -e "Available space: $(formatBytes "$(getBackupAvailableDiskSpace)")\n"
 
 # Execute backup.
 echo -e "Executing backup...\n"
@@ -144,11 +145,11 @@ if [ $? -ne 0 ]; then
 fi
 
 size_after=$(getBackupSize)
-size_difference=$(expr $size_after - $size_before)
+size_difference=$(( size_after - size_before ))
 
-echo -e "\nTotal backup size after backup: $(formatBytes $size_after) / $(formatBytes $backup_disk_size)"
-echo -e "Backup size difference: $(formatBytes $size_difference)"
-echo -e "Available space: $(formatBytes $(getBackupAvailableDiskSpace))\n"
+echo -e "\nTotal backup size after backup: $(formatBytes "$size_after") / $(formatBytes "$backup_disk_size")"
+echo -e "Backup size difference: $(formatBytes "$size_difference")"
+echo -e "Available space: $(formatBytes "$(getBackupAvailableDiskSpace)")\n"
 
 unmountBackup
 

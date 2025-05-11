@@ -40,7 +40,7 @@ USER=${1}
 
 while [ -z "$USER" ]; do
 	printf "Enter username: "
-	read USER
+	read -r USER
 done
 
 addUser

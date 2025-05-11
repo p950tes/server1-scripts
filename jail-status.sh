@@ -13,7 +13,7 @@ for jail in $jails; do
 	status=$(fail2ban-client status $jail | clean)
 	num_banned=$(echo "$status" | grep "Currently banned" | cut -d':' -f2)
 	echo " * Banned: $num_banned"
-	if [ $num_banned -gt 0 ]; then
+	if [ "$num_banned" -gt 0 ]; then
 		banned=$(echo "$status" | grep "Banned IP list" | cut -d':' -f2-)
 		echo " * IP(s): $banned"
 	fi

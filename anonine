@@ -32,5 +32,5 @@ esac
 log=/var/log/openvpn.log
 sleep 1
 echo "tail $log:"
-tail -n 50 $log | grep $(date +%H:%M)
+tail -n 50 $log | grep "$(date +%H:%M)"
 exit 0
