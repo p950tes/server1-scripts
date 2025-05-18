@@ -156,8 +156,9 @@ function print_status {
 		echo "${prefix}Up speed  : $(echo "$sums" | grep ^UP   | cut -d':' -f2 | numfmt --from iec --to=iec --suffix=B/s)"
 		
 		torrents=$(echo "$transmission_list" | grep -E '[0-9]+%')
-		echo "${prefix}Torrents seeding    : $(echo "$torrents" | grep -c '100%')"
-		echo "${prefix}Torrents downloading: $(echo "$torrents" | grep -vc '100%')"
+
+		echo "${prefix}Torrents seeding    : $(echo -n "$torrents" | grep -c '100%')"
+		echo "${prefix}Torrents downloading: $(echo -n "$torrents" | grep -vc '100%')"
 	fi
 
 	echo
