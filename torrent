@@ -1,21 +1,36 @@
 #!/bin/bash
-# shellcheck disable=SC2181
+
+SYSTEMD_UNIT="transmission-openvpn.service"
+DOCKER_IMAGE_NAME="haugene/transmission-openvpn"
+DOCKER_SERVICE_NAME="transmission-openvpn"
+
+RED='\033[01;31m'
+GREEN='\033[01;32m'
+RESET='\033[00m'
+
+function error {
+	>&2 echo "$@"
+}
+function fatal {
+	>&2 echo "$@"
+	exit 1
+}
 
 function get_all_torrent_ids {
 	transmission-remote --list | sed '1d;$d' | awk '{print $1}'
 }
+function is_port_open {
+	transmission-remote --port-test | grep -qi "open: Yes"
+}
 
 function add_trackers {
 	trackers=$1
-	if [ -z "$trackers" ]; then
-		echo "Please specify trackers"
-		exit 1
-	fi
+	[ -z "$trackers" ] && fatal "Please specify trackers"
 
 	get_all_torrent_ids | while read -r torrent; do
 		for tracker in $trackers; do
 			if [ -n "$tracker" ]; then
-				result=$(transmission-remote --torrent $torrent --tracker-add $tracker)
+				result=$(transmission-remote --torrent "$torrent" --tracker-add "$tracker")
 				echo "$torrent: $tracker: $result"
 			fi
 		done
@@ -23,52 +38,129 @@ function add_trackers {
 }
 function add_torrent {
 	torrentlink=${1:?'No torrent link specified'}
-	if ! [[ $torrentlink =~ ^magnet ]]; then
-		echo "Invalid magnet link: $torrentlink"
-		exit 1
-	fi
-	transmission-remote --add "$torrentlink"
-	if ! [ $? -ne 0 ]; then
-		echo "Failed to add torrent with link: $torrentlink"
-		exit 1
-	fi
+	[[ $torrentlink =~ ^magnet ]] || fatal "Invalid magnet link: $torrentlink"
+	
+	transmission-remote --add "$torrentlink" || fatal "Failed to add torrent with link: $torrentlink"
 }
 function remove_torrent {
 	id=${1:?'No torrent id specified'}
 	if ! get_all_torrent_ids | grep -qx "$id"; then
-		echo "No such torrent id: $id"
-		exit 1
+		fatal "No such torrent id: $id"
 	fi
-	transmission-remote --torrent "$id" --remove
-	if [ $? -ne 0 ]; then
-		echo "Failed to remove torrent with id: $id"
-		exit 1
-	fi
+	transmission-remote --torrent "$id" --remove || fatal "Failed to remove torrent with id: $id"
 }
 function enter_container {
 	local container_id
-	container_id=$(docker ps --filter "name=transmission-openvpn" -q)
-	if [ -z "$container_id" ]; then
-		echo "No running container found"
-		exit 1
-	fi
+	container_id=$(docker ps --filter "name=$DOCKER_SERVICE_NAME" -q)
+	[ -z "$container_id" ] && fatal "No running container found"
+	
 	echo "Entering container $container_id"
 	docker exec -it "$container_id" /bin/bash
 }
-function update_container {
-	echo "docker-compose --project-directory /etc/openvpn/docker up -d"
-	docker-compose --project-directory "/etc/openvpn/docker" up -d
+function update_container_image {
+	local pull_status docker_output_file exit_code
+	
+	docker_output_file=$(mktemp)
+	echo "Fetching latest docker image"
+	echo "+ docker pull $DOCKER_IMAGE_NAME:latest"
+	docker pull "$DOCKER_IMAGE_NAME:latest" | tee /dev/tty > "$docker_output_file"
+    exit_code=${PIPESTATUS[0]}
+
+	# Status: Image is up to date for haugene/transmission-openvpn:latest
+	# Status: Downloaded newer image for haugene/transmission-openvpn:latest
+    pull_status=$( < "$docker_output_file" grep "^Status:" | sed 's/^Status:\s*//g')
+    rm "$docker_output_file"
+	echo
+	if [ "$exit_code" -ne 0 ]; then
+		fatal -e "Failed to fetch latest docker image.\n"
+	fi
+	if [[ $pull_status =~ "Image is up to date" ]]; then
+		echo -e "Image is already up to date.\n"
+		return 0
+	elif [[ $pull_status =~ "Downloaded newer image" ]]; then
+		echo "A newer image was downloaded. Executing docker-compose to re-create docker service $DOCKER_SERVICE_NAME."
+
+		echo "+ docker-compose --project-directory /etc/openvpn/docker up -d"
+		docker-compose --project-directory "/etc/openvpn/docker" up -d
+	else
+		fatal "Unexpected status from pull command: $pull_status"
+	fi
 }
 
 function add_public_trackers {
 	local url trackers
 	url="https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
-	if ! trackers=$(curl --no-progress-meter "$url"); then
-    	>&2 echo "Failed to download trackers"
-    	return 1
-	fi
+	trackers=$(curl --no-progress-meter "$url") || fatal "Failed to download trackers from url: $url"
+
 	echo -e "Adding the following trackers to all torrents:\n$(echo "$trackers" | grep -v '^$')\n"
 	add_trackers "$trackers"
+}
+
+function print_status {
+	local all prefix
+	all=$(echo "$1" | grep all)
+	prefix="   "
+
+	if systemctl -q is-active "$SYSTEMD_UNIT"; then
+		echo -e "Systemd service status: ${GREEN}Running${RESET}"
+		echo -e "${prefix}since $(date --date="$(systemctl show "$SYSTEMD_UNIT" -p "ActiveEnterTimestamp" | cut -d= -f2-)" +'%F %T')"
+	else
+		echo -e "Systemd service status: ${RED}Stopped${RESET}"
+		echo -e "${prefix}since $(date --date="$(systemctl show "$SYSTEMD_UNIT" -p "InactiveEnterTimestamp" | cut -d= -f2-)" +'%F %T')"
+	fi
+	
+	echo
+
+	local container_id container_status
+	container_id=$(docker ps -a --filter "name=^/${DOCKER_SERVICE_NAME}$" --format "{{.ID}}")
+
+	if [ -n "$container_id" ]; then
+		container_status=$(docker inspect -f '{{.State.Status}}' "$container_id")
+		if [ "$container_status" = "running" ]; then
+			echo -e "Docker container status: ${GREEN}Running${RESET}"
+			echo -e "${prefix}since $(date --date="$(docker inspect -f '{{.State.StartedAt}}' "$container_id")" +'%F %T')"
+			echo -e "${prefix}Image: $DOCKER_IMAGE_NAME v$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version"}}' "$container_id")"
+			echo -e "${prefix}Image date: $(date --date="$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.created"}}' "$container_id")" +'%F %T')"
+			if [ -n "$all" ]; then
+				echo -e "${prefix}Container ID: $container_id"
+				echo -e "${prefix}Restart count: $(docker inspect -f '{{.RestartCount}}' "$container_id")"
+				docker stats --no-stream --format "CPU usage: {{.CPUPerc}}\nMemory Usage: {{.MemUsage}}\nNetwork I/O: {{.NetIO}}" "$container_id" | sed "s/^/${prefix}/g"
+			fi
+		else
+			echo -e "Docker container status: ${RED}$container_status${RESET}"
+		fi
+	else
+		echo -e "Docker container status: ${RED}Not running${RESET}"
+	fi
+
+	echo
+
+	local transmission_status listen_port transmission_list sums torrents
+	if ! transmission_status=$(transmission-remote --session-info 2>&1); then
+		echo -e "transmission-daemon is ${RED}not running${RESET}\n"
+		return 0
+	fi
+	echo "transmission-daemon $(echo "$transmission_status" | sed -n 's/^\s*Daemon version:\s*//p')"
+
+	listen_port=$(echo "$transmission_status" | sed -n 's/^\s*Listenport:\s*//p')
+	if is_port_open; then
+		echo -e "${prefix}Listen port: $listen_port (${GREEN}Open${RESET})"
+	else
+		echo -e "${prefix}Listen port: $listen_port (${GREEN}Closed${RESET})"
+	fi
+
+	transmission_list=$(transmission-remote --list)
+	if echo "$transmission_list" | grep -q "^Sum: "; then
+		sums=$(echo "$transmission_list" | awk '/^Sum:/ { printf "UP:%dK\nDOWN:%dK\n", $(NF-1), $NF }')
+		echo "${prefix}Down speed: $(echo "$sums" | grep ^DOWN | cut -d':' -f2 | numfmt --from iec --to=iec --suffix=B/s)"
+		echo "${prefix}Up speed  : $(echo "$sums" | grep ^UP   | cut -d':' -f2 | numfmt --from iec --to=iec --suffix=B/s)"
+		
+		torrents=$(echo "$transmission_list" | grep -E '[0-9]+%')
+		echo "${prefix}Torrents seeding    : $(echo "$torrents" | grep -c '100%')"
+		echo "${prefix}Torrents downloading: $(echo "$torrents" | grep -vc '100%')"
+	fi
+
+	echo
 }
 
 case "$1" in
@@ -88,25 +180,21 @@ case "$1" in
 		add_public_trackers
 		;;
 	status) 
-		sudo systemctl status transmission-openvpn --no-pager -l
+		print_status "$2"
 		;;
 	start|stop|restart) 
-		echo sudo systemctl "$1" transmission-openvpn
-		sudo systemctl "$1" transmission-openvpn
-		sudo systemctl status transmission-openvpn --no-pager -l
+		echo + sudo systemctl "$1" "$SYSTEMD_UNIT"
+		sudo systemctl "$1" "$SYSTEMD_UNIT"
+		sudo systemctl status "$SYSTEMD_UNIT" --no-pager -l
 		;;
 	log)
-		journalctl -e -o short-iso -u transmission-openvpn
+		journalctl -e -o short-iso -u "$SYSTEMD_UNIT"
 		;;
-	update-image)
-		echo "/usr/local/bin/update-transmission-image.sh"
-		/usr/local/bin/update-transmission-image.sh
+	update-container-image)
+		update_container_image
 		;;
 	enter-container)
 		enter_container
-		;;
-	update-container)
-		update_container
 		;;
 	*)
 		echo "Invalid parameter"
