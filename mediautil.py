@@ -4,6 +4,8 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
+from typing import cast
+from typing import Optional
 import sys
 import json
 import signal
@@ -21,7 +23,7 @@ FFMPEG_ANALYZEDURATION=str(100_000_000)
 # Must be an integer not lesser than 32. It is 5000000 by default.
 FFMPEG_PROBESIZE=str(100_000_000)
 
-def is_valid_file(parser, arg) -> str:
+def is_valid_file(parser: argparse.ArgumentParser, arg: str) -> str:
     if os.path.isfile(arg):
         return arg
     parser.error("The file %s does not exist!" % arg)
@@ -44,11 +46,12 @@ def confirm() -> None:
         input('Press ENTER to continue or CTRL-C to abort\n')
 
 def format_bytes(size: int, decimal_places=2) -> str:
+    modified_size = size
     for unit in ['B', 'KiB', 'MiB', 'GiB', 'TiB']:
-        if size < 1024.0 or unit == 'TiB':
-            break
-        size /= 1024.0
-    return f"{size:.{decimal_places}f} {unit}"
+        if modified_size < 1024.0 or unit == 'TiB':
+            return f"{modified_size:.{decimal_places}f} {unit}"
+        modified_size /= 1024.0
+    return f"{modified_size:.{decimal_places}f} TiB"
 
 class FfmpegExecutor:
     args: list[str]
@@ -100,9 +103,9 @@ class Stream:
     mimetype: str = ""
 
     def __init__(self, raw: dict):
-        self.type = raw.get("codec_type")
-        self.codec_name = raw.get("codec_name")
-        self.index = int(raw.get("index"))
+        self.type = cast(str, raw.get("codec_type"))
+        self.codec_name = cast(str, raw.get("codec_name"))
+        self.index = cast(int, raw.get("index"))
         self.raw = raw
         if 'tags' in raw:
             self.__parse_tags(raw['tags'])
@@ -116,15 +119,15 @@ class Stream:
     def __parse_tags(self, tags: dict) -> None:
         self.tags = tags
         if tags.get('language'):
-            self.language = tags.get('language')
+            self.language = cast(str, tags.get('language'))
         if tags.get('title'):
-            self.title = tags.get('title')
+            self.title = cast(str, tags.get('title'))
         if tags.get('filename'):
-            self.filename = tags.get('filename')
+            self.filename = cast(str, tags.get('filename'))
         if tags.get('mimetype'):
-            self.mimetype = tags.get('mimetype')
+            self.mimetype = cast(str, tags.get('mimetype'))
     
-    def get_size_in_bytes(self) -> int:
+    def get_size_in_bytes(self) -> Optional[int]:
         if 'tags' not in self.raw:
             return None
         tags = self.raw['tags']
@@ -166,7 +169,7 @@ class Stream:
                 result.append(self.codec_name)
         
         if self.raw.get('profile'):
-            result.append("(" + self.raw.get('profile') + ")")
+            result.append("(" + cast(str, self.raw.get('profile')) + ")")
 
         if 'width' in self.raw:
             result.append(str(self.raw.get('width')) + "x" + str(self.raw.get('height')))
@@ -195,7 +198,6 @@ class Stream:
 
         return ' '.join(result)
 
-
 class MediaFile:
     path: str
     container: str
@@ -208,13 +210,13 @@ class MediaFile:
         self.container = os.path.splitext(path)[1][1:]
         self.streams = streams
     
-    def get_video_streams(self) -> Stream:
+    def get_video_streams(self) -> list[Stream]:
         return [stream for stream in self.streams if stream.is_video()]
-    def get_audio_streams(self) -> Stream:
+    def get_audio_streams(self) -> list[Stream]:
         return [stream for stream in self.streams if stream.is_audio()]
-    def get_subtitle_streams(self) -> Stream:
+    def get_subtitle_streams(self) -> list[Stream]:
         return [stream for stream in self.streams if stream.is_subtitle()]
-    def get_other_streams(self) -> Stream:
+    def get_other_streams(self) -> list[Stream]:
         return [stream for stream in self.streams if stream.is_unknown_type()]
 
     def __str__(self) -> str:
@@ -416,11 +418,15 @@ def process_file(input_file_path: str) -> None:
                 executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_data_streams:
+        num_actions += 1
+        action_list.append(" * Will delete data streams")
+        executor.add_args(['-dn'])
+        executor.add_args(['-map_chapters', '-1'])
         if input_file.get_other_streams():
-            num_actions += 1
-            action_list.append(" * Will delete data streams")
-            executor.add_args(['-dn'])
-            executor.add_args(['-map_chapters', '-1'])
+            action_list.append(" * Will delete the following other streams:")
+            for stream in input_file.get_other_streams():
+                action_list.append("    - " + str(stream))
+                executor.add_args(['-map', '-0:' + str(stream.index)])
 
     if ARGS.delete_subs:
         if len(input_file.get_subtitle_streams()) > 0:
