@@ -146,7 +146,7 @@ function print_status {
 	if is_port_open; then
 		echo -e "${prefix}Listen port: $listen_port (${GREEN}Open${RESET})"
 	else
-		echo -e "${prefix}Listen port: $listen_port (${GREEN}Closed${RESET})"
+		echo -e "${prefix}Listen port: $listen_port (${RED}Closed${RESET})"
 	fi
 
 	transmission_list=$(transmission-remote --list)
