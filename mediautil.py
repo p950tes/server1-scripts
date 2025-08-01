@@ -160,34 +160,34 @@ class Stream:
 
     def __str__(self) -> str:
         result = list()
-        result.append("Stream #" + str(self.index))
+        result.append(f"Stream #{self.index}")
         result.append(self.type)
         if self.language and (self.is_audio() or self.is_subtitle()):
-            result.append("(" + self.language + ")")
+            result.append(f"({self.language})")
         
         if self.codec_name:
                 result.append(self.codec_name)
         
         if self.raw.get('profile'):
-            result.append("(" + cast(str, self.raw.get('profile')) + ")")
+            result.append(f"({self.raw.get('profile')})")
 
         if 'width' in self.raw:
-            result.append(str(self.raw.get('width')) + "x" + str(self.raw.get('height')))
+            result.append(f"{self.raw.get('width')}x{self.raw.get('height')}")
         
         if self.raw.get('channel_layout'):
-            result.append(self.raw.get('channel_layout'))
+            result.append(f"{self.raw.get('channel_layout')}")
 
         num_bytes = self.get_size_in_bytes()
         if num_bytes:
             result.append(format_bytes(num_bytes))
         
         if self.title:
-            result.append("'" + self.title + "'")
+            result.append(f"'{self.title}'")
         
         if self.filename:
-            result.append("'" + self.filename + "'")
+            result.append(f"'{self.filename}'")
         if self.mimetype:
-            result.append("(" + self.mimetype + ")")
+            result.append(f"({self.mimetype})")
 
         if self.is_default():
             result.append("(default)")
@@ -258,7 +258,7 @@ def parse_mediafile(filepath: str) -> MediaFile:
     # Validate indexes
     for i in range(len(streams)):
         if i != streams[i].index:
-            fatal("The array index " + str(i) + " does not match the stream index " + str(streams[i].index))
+            fatal(f"The array index {i} does not match the stream index {streams[i].index}")
 
     return MediaFile(filepath, format, streams)
 
@@ -271,6 +271,7 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument('--set-stream-language', nargs=2, metavar=('STREAM', 'LANGUAGE'), help='Sets stream language to the specified language')
     argparser.add_argument('--output-container', dest='output_container', help='Specify a new output container')
     argparser.add_argument('--delete-stream', metavar='stream', help='Deletes the specified stream')
+    argparser.add_argument('--extract-stream', metavar='stream', help='Deletes the specified stream')
     argparser.add_argument('--delete-audio-streams-except', metavar='stream', help='Deletes all audio streams except the one specified', type=int)
     argparser.add_argument('--delete-data-streams', help='Deletes all data streams', action='store_true')
     argparser.add_argument('--delete-image-streams', help='Deletes all image streams', action='store_true')
@@ -297,11 +298,17 @@ def parse_args() -> argparse.Namespace:
             args.delete_stream = list(map(int, args.delete_stream.split(",")))
         else:
             args.delete_stream = [int(args.delete_stream)]
+    if args.extract_stream:
+        if "," in args.extract_stream:
+            args.extract_stream = list(map(int, args.extract_stream.split(",")))
+        else:
+            args.extract_stream = [int(args.extract_stream)]
     
     return args
 
-def extract_subtitles(input_file: MediaFile, destination_dir: str):
-    subtitle_streams = input_file.get_subtitle_streams()
+def extract_subtitles(input_file: MediaFile, destination_dir: str, subtitle_streams: list[Stream] = []):
+    if not subtitle_streams:
+        subtitle_streams = input_file.get_subtitle_streams()
     if not subtitle_streams:
         print("WARNING: No subtitle streams present")
         return
@@ -315,14 +322,14 @@ def extract_subtitles(input_file: MediaFile, destination_dir: str):
     for subtitle in subtitle_streams:
         output_file = resolve_new_subtitle_file_path(subtitle, inputfilename_without_extension, destination_dir)
 
-        print("Extracting subtitle: " + str(subtitle))
+        print(f"Extracting subtitle: {subtitle}")
         executor = FfmpegExecutor(input_file.path)
-        executor.add_args(['-map', '0:' + str(subtitle.index)])
+        executor.add_args(['-map', f'0:{subtitle.index}'])
         executor.add_args(['-c', 'srt'])
         executor.add_arg(output_file)
         exitcode = executor.execute()
         if exitcode != 0:
-            print_error("Failed to extract subtitle: " + str(subtitle))
+            print_error(f"Failed to extract subtitle: {subtitle}")
 
 def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir: str) -> str:
     language_str = subtitle.language
@@ -331,20 +338,20 @@ def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir:
     if subtitle.is_forced():
         language_str += ".forced"
 
-    output_base = destination_dir + "/" + name + "." + language_str
-    output_file = output_base + ".srt"
+    output_base = f"{destination_dir}/{name}.{language_str}"
+    output_file = f"{output_base}.srt"
     i = 0
     while os.path.exists(output_file):
         i += 1
-        output_file = output_base + "." + str(i) + ".srt"
+        output_file = f"{output_base}.{i}.srt"
     return output_file
 
 def process_file(input_file_path: str) -> None:
 
-    print("\nProcessing '" + input_file_path + "'")
+    print(f"\nProcessing '{input_file_path}'")
     input_file = parse_mediafile(input_file_path)
 
-    print("\n" + str(input_file) + "\n")
+    print(f"\n{input_file}\n")
     if ARGS.list:
         return
 
@@ -364,7 +371,7 @@ def process_file(input_file_path: str) -> None:
 
     if container_change:
         num_actions += 1
-        action_list.append(" * Will change container from " + input_file.container + " to " + output_container)
+        action_list.append(f" * Will change container from {input_file.container} to {output_container}")
 
     if ARGS.extract_subs:
         action_list.append(" * Will extract all subtitles")
@@ -372,41 +379,50 @@ def process_file(input_file_path: str) -> None:
         if image_based_subs:
             action_list.append("   WARNING: The following subtitles are image based and will not be extracted:")
             for sub in image_based_subs:
-                action_list.append("    - " + str(sub))
+                action_list.append(f"    - {sub}")
 
     if ARGS.set_stream_language:
         stream_index = int(ARGS.set_stream_language[0])
         new_language = ARGS.set_stream_language[1]
         if stream_index >= len(input_file.streams):
-            fatal("Stream index not found: " + str(ARGS.stream_index))
+            fatal(f"Stream index not found: {ARGS.stream_index}")
         stream_to_modify = input_file.streams[stream_index]
         if stream_to_modify.language == new_language:
-            print("WARNING: The specified stream already has '" + new_language + "' set as language: \n" + str(stream_to_modify))
+            print(f"WARNING: The specified stream already has '{new_language}' set as language: \n{stream_to_modify}")
         else:
             num_actions += 1
-            action_list.append(" * Will update the following stream language to '" + new_language + "'" + "   " + str(stream_to_modify))        
-            executor.add_args(['-metadata:s:' + str(stream_index), 'language=' + new_language])
+            action_list.append(f" * Will update the following stream language to '{new_language}': {stream_to_modify}")
+            executor.add_args([f"-metadata:s:{stream_index}", f"language={new_language}"])
+
+    if ARGS.extract_stream != None:
+        for index in ARGS.extract_stream:
+            if index >= len(input_file.streams):
+                fatal(f"Stream index not found: {index}")
+            stream_to_extract = input_file.streams[index]
+            if not stream_to_extract.is_subtitle:
+                fatal("Only subtitle streams are currently supported for extractions.")
+            action_list.append(f" * Will extract the following stream: {stream_to_extract}")
 
     if ARGS.delete_stream != None:
         for index in ARGS.delete_stream:
             if index >= len(input_file.streams):
-                fatal("Stream index not found: " + str(index))
+                fatal(f"Stream index not found: {index}")
             num_actions += 1
             stream_to_delete = input_file.streams[index]
-            executor.add_args(['-map', '-0:' + str(stream_to_delete.index)])
-            action_list.append(" * Will delete the following stream:" + "   " + str(stream_to_delete))
+            executor.add_args(['-map', f'-0:{stream_to_delete.index}'])
+            action_list.append(f" * Will delete the following stream: {stream_to_delete}")
         
     if ARGS.delete_audio_streams_except != None:
         if ARGS.delete_audio_streams_except > len(input_file.get_audio_streams()):
-            fatal("Audio stream index not found: " + str(ARGS.delete_audio_streams_except))
+            fatal(f"Audio stream index not found: {ARGS.delete_audio_streams_except}")
         
         audio_streams_to_delete = [stream for stream in input_file.get_audio_streams() if stream.index != ARGS.delete_audio_streams_except]
         if audio_streams_to_delete:
             num_actions += 1
             action_list.append(" * Will delete the following audio streams:")
             for stream in audio_streams_to_delete:
-                action_list.append("    - " + str(stream))
-                executor.add_args(['-map', '-0:' + str(stream.index)])
+                action_list.append(f"    - {stream}")
+                executor.add_args(['-map', f'-0:{stream.index}'])
 
     if ARGS.delete_image_streams:
         image_streams_to_delete = [stream for stream in input_file.get_video_streams() if stream.is_image()]
@@ -414,8 +430,8 @@ def process_file(input_file_path: str) -> None:
             num_actions += 1
             action_list.append(" * Will delete the following image video streams:")
             for stream in image_streams_to_delete:
-                action_list.append("    - " + str(stream))
-                executor.add_args(['-map', '-0:' + str(stream.index)])
+                action_list.append(f"    - {stream}")
+                executor.add_args(['-map', f'-0:{stream.index}'])
 
     if ARGS.delete_data_streams:
         num_actions += 1
@@ -425,8 +441,8 @@ def process_file(input_file_path: str) -> None:
         if input_file.get_other_streams():
             action_list.append(" * Will delete the following other streams:")
             for stream in input_file.get_other_streams():
-                action_list.append("    - " + str(stream))
-                executor.add_args(['-map', '-0:' + str(stream.index)])
+                action_list.append(f"    - {stream}")
+                executor.add_args(['-map', f'-0:{stream.index}'])
 
     if ARGS.delete_subs:
         if len(input_file.get_subtitle_streams()) > 0:
@@ -458,24 +474,26 @@ def process_file(input_file_path: str) -> None:
     
     working_dir = os.path.dirname(os.path.abspath(input_file.path))
     if ARGS.create_dir:
-        working_dir = working_dir + "/" + inputfilename_without_extension
+        working_dir = f"{working_dir}/{inputfilename_without_extension}"
 
-    working_file = working_dir + "/" + inputfilename_without_extension + ".new." + output_container
-    verbose("Working file    : " + working_file)
+    working_file = f"{working_dir}/{inputfilename_without_extension}.new.{output_container}"
+    verbose(f"Working file    : {working_file}")
     if os.path.exists(working_file):
-        fatal("Working file already exists: " + working_file)
+        fatal(f"Working file already exists: {working_file}")
 
-    output_file = working_dir + "/" + inputfilename_without_extension + "." + output_container
-    verbose("Destination file: " + output_file)
+    output_file = f"{working_dir}/{inputfilename_without_extension}.{output_container}"
+    verbose(f"Destination file: {output_file}")
 
     if container_change and os.path.exists(output_file):
-        fatal("Output file already exists: " + output_file)
-
+        fatal(f"Output file already exists: {output_file}")
 
     if not os.path.exists(working_dir) and not ARGS.dry_run:
-        verbose("Creating working dir: " + working_dir)
+        verbose(f"Creating working dir: {working_dir}")
         os.makedirs(working_dir)
 
+    if ARGS.extract_stream:
+        streams_to_extract = [input_file.streams[index] for index in ARGS.extract_stream]
+        extract_subtitles(input_file, working_dir, streams_to_extract)
     if ARGS.extract_subs:
         extract_subtitles(input_file, working_dir)
 
@@ -488,7 +506,7 @@ def process_file(input_file_path: str) -> None:
     returncode = executor.execute()
 
     if returncode != 0:
-        fatal("ffmpeg execution failed with exit code " + str(returncode))
+        fatal(f"ffmpeg execution failed with exit code {returncode}")
 
     print("\nffmpeg execution successful")
 
@@ -501,17 +519,17 @@ def cleanup(inputfile: str, workingfile: str, outputfile: str) -> None:
         return
     if not ARGS.cleanup:
         print("Cleanup disabled, leaving old file behind.")
-        print("Original file: " + inputfile)
-        print("Modified file: " + workingfile)
+        print(f"Original file: {inputfile}")
+        print(f"Modified file: {workingfile}")
         return
 
     if not os.path.exists(workingfile):
-        fatal(workingfile + " does not exist. Aborting cleanup")
+        fatal(f"{workingfile} does not exist. Aborting cleanup")
 
-    verbose("Deleting " + inputfile)
+    verbose(f"Deleting {inputfile}")
     os.unlink(inputfile)
 
-    verbose("Moving " + workingfile + " -> " + outputfile)
+    verbose(f"Moving {workingfile} -> {outputfile}")
     os.replace(workingfile, outputfile)
 
 ARGS = parse_args()
