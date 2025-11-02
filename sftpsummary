@@ -4,62 +4,57 @@ import argparse
 from datetime import datetime, timedelta
 import re
 import subprocess
-import time
 import os
-
-LOGPATH = "/var/log/sftp.log"
-FILTERS = [": opendir ", ": closedir ", ": close "]
-
-DATETIME_PATTERN = re.compile("^\d+-\d+-\d+ \d+:\d+:\d+")
-USER_PATTERN = re.compile("session opened for local user ([\w\.]+) from \[")
-SESSIONID_PATTERN = re.compile("\[(\d+)\]")
-TYPE_PATTERN = re.compile("\[\d+\]: (\w+) ")
-DETAILS_PATTERN = re.compile("\[\d+\]: \w+ \"(.+)\"")
-
-SESSIONS_DICT = dict()
-SESSIONS_LIST = list()
+import sys
 
 class LogEntry:
+    DATETIME_PATTERN = re.compile(r'^\d+-\d+-\d+ \d+:\d+:\d+')
+    USER_PATTERN = re.compile(r'session opened for local user ([\w\.]+) from \[')
+    SESSIONID_PATTERN = re.compile(r'\[(\d+)\]')
+    TYPE_PATTERN = re.compile(r'\[\d+\]: (\w+) ')
+    DETAILS_PATTERN = re.compile(r'\[\d+\]: \w+ \"(.+)\"')
+
     def __init__(self, line):
         self.line = line
 
-    def getUser(self):
-        return self.__getMatch(USER_PATTERN)
-    def getTime(self):
-        return self.__getMatch(DATETIME_PATTERN)
-    def getSessionId(self):
-        return self.__getMatch(SESSIONID_PATTERN)
+    def get_user(self) -> str:
+        return self.__get_match(self.USER_PATTERN)
+    def get_time(self) -> str:
+        return self.__get_match(self.DATETIME_PATTERN)
+    def get_session_id(self) -> str:
+        return self.__get_match(self.SESSIONID_PATTERN)
 
-    def getType(self):
+    def get_type(self) -> str:
         if ": session opened " in self.line:
             return "sessionOpen"
         elif ": session closed " in self.line:
             return "sessionClose"
         else:
-            return self.__getMatch(TYPE_PATTERN)
+            return self.__get_match(self.TYPE_PATTERN)
     
-    def getDetails(self):
-        return self.__getMatch(DETAILS_PATTERN)
+    def get_details(self) -> str:
+        return self.__get_match(self.DETAILS_PATTERN)
 
-    def __getMatch(self, pattern):
+    def __get_match(self, pattern) -> str:
         matches = pattern.findall(self.line)
         if len(matches) > 0:
             return matches[0]
         return ""
 
 class Session:
-    start = ""
-    end = ""
-    user = ""
     def __init__(self, sessionId):
         self.id = sessionId
-        self.userActions = list()
-    def addUserAction(self, time, actionType, details):
-        self.userActions.append(UserAction(time, actionType, details))
+        self.user_actions = list()
+        self.start = ""
+        self.end = ""
+        self.user = ""
 
-    def createSummary(self):
-        result =  "%s [%s] %s - %s\n" % (self.user, self.id, self.start, self.end)
-        for action in self.userActions:
+    def add_user_action(self, time, actionType, details) -> None:
+        self.user_actions.append(UserAction(time, actionType, details))
+
+    def create_summary(self) -> str:
+        result = f"{self.user} [{self.id}] {self.start} - {self.end}\n"
+        for action in self.user_actions:
             result += action.time + "|" + action.type + "|" + action.details + "|!\n"
         return result
 
@@ -69,72 +64,56 @@ class UserAction:
         self.type = aType
         self.details = details
 
+class SessionsResolver:
+    LOG_FILE_PATH = "/var/log/sftp.log"
+    FILTERS = [": opendir ", ": closedir ", ": close "]
 
-def processLogFile():
-    if not os.path.exists(LOGPATH):
-        return
+    def __init__(self) -> None:
+        self.sessions = dict()
 
-    with open(LOGPATH, "r") as logfile:
-        for line in logfile:
-            if not ARGS.date or line.startswith(ARGS.date):
-                if any(filtr in line for filtr in FILTERS):
-                    continue
-                processLine(line)
+    def find_sessions(self, date: str) -> list[Session]:
+        if not os.path.exists(self.LOG_FILE_PATH):
+            print(f"Error: sftp log file does not exist: {self.LOG_FILE_PATH}", file=sys.stderr)
+            return []
 
-def processLine(line):
-    entry = LogEntry(line)
-    sessionId = entry.getSessionId()
-    if not sessionId:
-        print("WARNING: Failed to get sessionId from line, will skip: \n" + line)
-        return
-    
-    session = getSession(sessionId)
+        with open(self.LOG_FILE_PATH, "r") as logfile:
+            for line in logfile:
+                if not date or line.startswith(date):
+                    if any(filtr in line for filtr in self.FILTERS):
+                        continue
+                    self.__process_line(line)
 
-    tType = entry.getType()
-    time = entry.getTime()
+        return list(self.sessions.values())
 
-    if tType == "sessionOpen":
-        session.user = entry.getUser()
-        session.start = time
-    elif tType == "sessionClose":
-        session.end = time
-    elif tType == "open":
-        session.addUserAction(time, tType, entry.getDetails())
-    
-def getSession(sessionId):
-    if sessionId in SESSIONS_DICT:
-        return SESSIONS_DICT[sessionId]
-    else:
-        newSession = Session(sessionId)
-        SESSIONS_DICT[sessionId] = newSession
-        SESSIONS_LIST.append(newSession)
-        return newSession
+    def __process_line(self, line) -> None:
+        entry = LogEntry(line)
+        session_id = entry.get_session_id()
+        if not session_id:
+            print("WARNING: Failed to get sessionId from line, will skip: \n" + line, file=sys.stderr)
+            return
+        
+        session = self.__resolve_session(session_id)
 
-def getSessionList():
-    return SESSIONS_LIST
-def sessionsFound():
-    if len(getSessionList()) > 0:
-        return True
-    else:
-        return False
+        tType = entry.get_type()
+        time = entry.get_time()
 
-def createSummary():
-    sessionList = getSessionList()
-    if ARGS.date:
-        result = "Summary " + ARGS.date
-    else:
-        result = "Summary"
+        if tType == "sessionOpen":
+            session.user = entry.get_user()
+            session.start = time
+        elif tType == "sessionClose":
+            session.end = time
+        elif tType == "open":
+            session.add_user_action(time, tType, entry.get_details())
+        
+    def __resolve_session(self, session_id) -> Session:
+        if session_id in self.sessions:
+            return self.sessions[session_id]
+        else:
+            new_session = Session(session_id)
+            self.sessions[session_id] = new_session
+            return new_session
 
-    numSessions = str(len(sessionList))
-    result += " (" + numSessions + " sessions)\n\n"
-    
-    for session in sessionList:
-        result += session.createSummary() + "\n"
-    return result
-
-def parseArguments():
-    global ARGS
-    
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Process SFTP log.')
 
     parser.add_argument("-q", '--quiet', action="store_true", help="Suppress any output to STDOUT")
@@ -146,28 +125,36 @@ def parseArguments():
     dategroup.add_argument("--yesterday", action="store_const", dest="date", const=(datetime.now() - timedelta(days=1)).strftime("%F"), help="Parse logs from yesterday")
 
     parser.set_defaults(quiet=False)
-    ARGS = parser.parse_args()
+    return parser.parse_args()
 
-def sendEmail(emailContents):
+def create_summary(date: str, sessions: list[Session]) -> str:
+    if date:
+        result = "Summary " + date
+    else:
+        result = "Summary"
+
+    result += f" ({len(sessions)} sessions)\n\n"
+    
+    for session in sorted(sessions, key=lambda session: session.start):
+        result += session.create_summary() + "\n"
+    return result
+
+def send_email(email_body: str, email_address: str, date: str) -> None:
     subject = "server1 SFTP Summary"
-    if ARGS.date:
-        subject += " " + ARGS.date
+    if date:
+        subject += " " + date
 
-    mailProcess = subprocess.Popen(["mailx", "-s " + subject, ARGS.mail], stdin=subprocess.PIPE)
-    mailProcess.communicate(emailContents.encode())
-
+    mailProcess = subprocess.Popen(["mailx", "-s " + subject, email_address], stdin=subprocess.PIPE)
+    mailProcess.communicate(email_body.encode())
 
 #--------------------
 
-parseArguments()
-processLogFile()
-summary = createSummary()
+args = parse_arguments()
+sessions = SessionsResolver().find_sessions(args.date)
+summary = create_summary(args.date, sessions)
 
-if sessionsFound() and ARGS.mail:
-    sendEmail(summary)
+if args.mail and sessions:
+    send_email(summary, args.mail, args.date)
 
-if not ARGS.quiet:
+if not args.quiet:
     print(summary)
-
-exit(0)
-
