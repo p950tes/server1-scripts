@@ -8,6 +8,32 @@ RED='\033[01;31m'
 GREEN='\033[01;32m'
 RESET='\033[00m'
 
+function usage {
+	>&2 cat <<EOF
+Usage: torrent [command] [arguments]
+
+Available commands:
+  list                   List all torrents in transmission-daemon
+  add <torrent-link>     Add a torrent by magnet link or URL
+  rm <torrent-id>        Remove a torrent by its ID
+  addtracker <trackers>  Add custom trackers to all torrents (space-separated)
+  add-public-trackers    Add public trackers from a curated list to all torrents
+  status [all]           Show status of systemd service, docker container, and transmission-daemon
+                          (use 'all' for detailed container stats)
+  start                  Start the transmission-openvpn service
+  stop                   Stop the transmission-openvpn service
+  restart                Restart the transmission-openvpn service
+  log                    Show logs for the transmission-openvpn service
+  shell                  Enter an interactive shell in the running docker container
+  update-container-image Update the docker image and recreate the container if needed
+
+Examples:
+  torrent add magnet:?xt=urn:btih:...
+  torrent addtracker "http://tracker1.com http://tracker2.com"
+  torrent status all
+EOF
+}
+
 function error {
 	>&2 echo "$@"
 }
@@ -198,7 +224,7 @@ case "$1" in
 		enter_container
 		;;
 	*)
-		echo "Invalid parameter"
+		usage
 		exit 2
 		;;
 esac
