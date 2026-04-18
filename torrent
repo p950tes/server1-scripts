@@ -220,7 +220,7 @@ case "$1" in
 	update-container-image)
 		update_container_image
 		;;
-	enter-container)
+	shell)
 		enter_container
 		;;
 	*)
