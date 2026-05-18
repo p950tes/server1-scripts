@@ -112,23 +112,26 @@ class SubtitleFile:
 class VideoFile:
 
     EPISODE_REGEX = re.compile(r'\b(?:S\d{1,3}E\d{1,3}|\d{1,3}x\d{1,3})\b', re.IGNORECASE)
-    # EPISODE_REGEX = re.compile(r'(?i)(S\d{1,4}E\d{1,3}|\d{1,4}X\d{1,3})')
 
     path: Path
-    is_episode: bool
     subtitle_files: list[SubtitleFile]
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self.is_episode = self.__is_episode(path)
         self.subtitle_files = []
     
     def __repr__(self) -> str:
         return f"VideoFile(path={self.path!s})"
     
-    @staticmethod
-    def __is_episode(path: Path) -> bool:
-        return bool(VideoFile.EPISODE_REGEX.search(path.stem))
+    def is_episode(self) -> bool:
+        return bool(VideoFile.EPISODE_REGEX.search(self.path.stem))
+    
+    def resolve_principal_episode_name(self) -> str:
+        """ Returns the part of the filename up til and including the EPISODE_REGEX """
+        match = VideoFile.EPISODE_REGEX.search(self.path.stem)
+        if match:
+            return self.path.stem[:match.end()]
+        return self.path.stem
     
     def resolve_subtitle_target_dir(self) -> Path:
         if self.is_episode:
@@ -161,14 +164,14 @@ class SubtitleMatcher:
     def find_match(self, subtitle: SubtitleFile) -> Optional[VideoFile]:
         if len(self.video_files) == 1:
             return self.video_files[0]
-        
+
         predicates = [
             lambda video: subtitle.name_contains(video.path.stem),
             lambda video: subtitle.name_contains(video.path.stem, case_sensitive=False),
             lambda video: subtitle.tree_contains(video.path.stem),
             lambda video: subtitle.tree_contains(video.path.stem, case_sensitive=False),
+            lambda video: video.is_episode() and subtitle.name_contains(video.resolve_principal_episode_name(), case_sensitive=False),
         ]
-
         for predicate in predicates:
             for video in self.video_files:
                 if predicate(video):
@@ -183,7 +186,10 @@ def main() -> None:
 
     global DRY_RUN
     DRY_RUN = args.dry_run
-    # DRY_RUN = True
+
+    default_language = None
+    if args.assume_language:
+        default_language = Language.parse(args.assume_language)
 
     resolver: FileResolver = FileResolver()
     subtitle_files: List[SubtitleFile] = resolver.find_subtitle_files()
@@ -197,12 +203,13 @@ def main() -> None:
         sys.exit(1)
 
     match_subtitles_with_videos(video_files, subtitle_files)
-    rearrange_subtitle_files(video_files)
+    rearrange_subtitle_files(video_files, default_language)
 
 def parse_command_line_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Arrange subtitle files in directory.")
     parser.add_argument("directory", type=Path, help="Directory to process.")
     parser.add_argument("--dry-run", action="store_true", help="Dry-run")
+    parser.add_argument("--assume-language", type=str, help="Assumes this language if the subtitle file has no language specified")
 
     return parser.parse_args()
 
@@ -215,15 +222,18 @@ def match_subtitles_with_videos(video_files: list[VideoFile], subtitle_files: li
         else:
             print(f"Failed to find matching video for subtitle: {subtitle}")
 
-def rearrange_subtitle_files(video_files: list[VideoFile]) -> None:
+def rearrange_subtitle_files(video_files: list[VideoFile], default_language: Language|None) -> None:
     for video_file in video_files:
         target_directory = video_file.resolve_subtitle_target_dir()
         target_directory.mkdir(exist_ok=True)
 
         for subtitle_file in video_file.subtitle_files:
             if not subtitle_file.language:
-                print(f"Ignoring subtitle file: {subtitle_file.path}")
-                continue
+                if default_language:
+                    subtitle_file.language = default_language
+                else:
+                    print(f"Ignoring subtitle file due to missing language tag: {subtitle_file.path}")
+                    continue
 
             target_filename = f"{video_file.path.stem}.{subtitle_file.create_file_suffix()}"
             destination = target_directory / target_filename
