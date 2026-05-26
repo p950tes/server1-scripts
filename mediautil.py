@@ -4,12 +4,13 @@ import argparse
 import os
 import subprocess
 from pathlib import Path
-from typing import cast
-from typing import Optional
+from typing import IO
 import sys
+import io
 import json
 import signal
 import threading
+from dataclasses import dataclass
 
 signal.signal(signal.SIGINT, lambda sig, frame : sys.exit(1))
 
@@ -24,20 +25,21 @@ FFMPEG_ANALYZEDURATION=str(100_000_000)
 FFMPEG_PROBESIZE=str(100_000_000)
 
 def is_valid_file(parser: argparse.ArgumentParser, arg: str) -> str:
-    if os.path.isfile(arg):
+    if Path(arg).is_file():
         return arg
-    parser.error("The file %s does not exist!" % arg)
+    parser.error(f"The file {arg} does not exist!")
 
 def print_error(*args, **kwargs) -> None:
-    print("ERROR: ", file=sys.stderr, end='')
-    print(*args, file=sys.stderr, **kwargs)
+    print("ERROR:", *args, file=sys.stderr, **kwargs)
 
 def fatal(*args, **kwargs) -> None:
     print_error(*args, **kwargs)
     exit(1)
 
+def is_verbose() -> bool:
+    return ARGS.verbose
 def verbose(*args, **kwargs) -> None:
-    if ARGS.verbose:
+    if is_verbose():
         print(*args, file=sys.stderr, **kwargs)
 
 def confirm() -> None:
@@ -53,12 +55,67 @@ def format_bytes(size: int, decimal_places=2) -> str:
         modified_size /= 1024.0
     return f"{modified_size:.{decimal_places}f} TiB"
 
+@dataclass
+class CommandExecutionResult:
+    args: list[str]
+    stdout: str = ""
+    stderr: str = ""
+    returncode: int|None = None
+
+    def is_success(self) -> bool:
+        return self.returncode == 0
+
+class CommandExecutor:
+    print_output: bool
+
+    def __init__(self, print_output: bool = False) -> None:
+        if is_verbose():
+            print_output = True
+        self.print_output = print_output
+    
+    def execute(self, args: list[str]) -> CommandExecutionResult:
+        verbose(' '.join(args))
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True)
+
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+        
+        stdout_reader = threading.Thread(target=self.__process_output_stream, args=(process.stdout, stdout_buffer, sys.stdout), daemon=True)
+        stderr_reader = threading.Thread(target=self.__process_output_stream, args=(process.stderr, stderr_buffer, sys.stderr), daemon=True)
+        stdout_reader.start()
+        stderr_reader.start()
+        try:
+            process.wait()
+        finally:
+            stdout_reader.join(timeout=1.0)
+            stderr_reader.join(timeout=1.0)
+
+        return CommandExecutionResult(
+            args=args,
+            stdout=stdout_buffer.getvalue(),
+            stderr=stderr_buffer.getvalue(),
+            returncode=process.returncode
+        )
+
+    def __process_output_stream(self, output_stream: IO[str], output_buffer: io.StringIO, print_stream: IO[str]) -> None:
+        try:
+            for line in iter(output_stream.readline, ''):
+                if self.print_output:
+                    print_stream.write(line)
+                    print_stream.flush()
+                output_buffer.write(line)
+                output_buffer.flush()
+        except Exception as e:
+            print_error(f"Failed to process output stream: {e}")
+        finally:
+            output_stream.close()
+
 class FfmpegExecutor:
     args: list[str]
 
     def __init__(self, input_file_path: str) -> None:
         self.args = ['ffmpeg']
-        if not ARGS.verbose:
+        if not is_verbose():
             self.args.extend(['-loglevel', 'warning'])
         self.args.extend(['-nostdin', '-hide_banner'])
         self.args.extend(['-analyzeduration', FFMPEG_ANALYZEDURATION])
@@ -71,42 +128,38 @@ class FfmpegExecutor:
     def add_args(self, arguments: list[str]) -> None:
         self.args.extend(arguments)
 
-    def execute(self) -> int:
-        print(self)
+    def execute(self) -> CommandExecutionResult:
+        print(' '.join(self.args))
         if ARGS.dry_run:
             print("(dry-run, not actually executing)")
-            return 0
-        process = subprocess.Popen(self.args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        output_reader = threading.Thread(target=self.__read_output, args=(process,))
-        output_reader.start()
-        process.wait()
-        output_reader.join()
-        return process.returncode
-
-    def __read_output(self, process):
-        for line in iter(process.stdout.readline, b''):
-            sys.stdout.write(line.decode(sys.stdout.encoding))
-        process.stdout.close()
-
-    def __str__(self) -> str:
-        return ' '.join(self.args)
+            return CommandExecutionResult([], returncode=0)
+        executor = CommandExecutor(print_output=True)
+        return executor.execute(self.args)
 
 class Stream:
     type: str
     codec_name: str
     index: int
     raw: dict
-    tags: dict = dict()
-    language: str = "unknown"
-    title: str = ""
-    filename: str = ""
-    mimetype: str = ""
+    tags: dict
+    language: str|None
+    title: str|None
+    filename: str|None
+    mimetype: str|None
+    frames: list[dict]
+    closed_captions_type: str|None
 
     def __init__(self, raw: dict):
-        self.type = cast(str, raw.get("codec_type"))
-        self.codec_name = cast(str, raw.get("codec_name"))
-        self.index = cast(int, raw.get("index"))
+        self.type = raw.get("codec_type", "")
+        self.codec_name = raw.get("codec_name", "")
+        self.index = raw["index"]
         self.raw = raw
+        self.frames = []
+        self.language = None
+        self.title = None
+        self.filename = None
+        self.mimetype = None
+        self.closed_captions_type = None
         if 'tags' in raw:
             self.__parse_tags(raw['tags'])
 
@@ -118,16 +171,29 @@ class Stream:
     
     def __parse_tags(self, tags: dict) -> None:
         self.tags = tags
-        if tags.get('language'):
-            self.language = cast(str, tags.get('language'))
-        if tags.get('title'):
-            self.title = cast(str, tags.get('title'))
-        if tags.get('filename'):
-            self.filename = cast(str, tags.get('filename'))
-        if tags.get('mimetype'):
-            self.mimetype = cast(str, tags.get('mimetype'))
+        if 'language' in tags:
+            self.language = tags['language']
+        if 'title' in tags:
+            self.title = tags['title']
+        if 'filename' in tags:
+            self.filename = tags['filename']
+        if 'mimetype' in tags:
+            self.mimetype = tags['mimetype']
     
-    def get_size_in_bytes(self) -> Optional[int]:
+    def digest_frame(self, frame: dict) -> None:
+        self.frames.append(frame)
+        if not 'side_data_list' in frame:
+            return
+        side_data_list = frame['side_data_list']
+        for side_data in side_data_list:
+            if not 'side_data_type' in side_data:
+                continue
+            side_data_type = side_data['side_data_type']
+            if 'Closed Captions' in side_data_type or side_data_type == 'CC':
+                # Mark video streams as having EIA608
+                self.closed_captions_type = side_data_type
+
+    def get_size_in_bytes(self) -> int|None:
         if 'tags' not in self.raw:
             return None
         tags = self.raw['tags']
@@ -152,11 +218,24 @@ class Stream:
     def is_default(self) -> bool:
         return self.__has_disposition('default')
     def is_forced(self) -> bool:
-        return self.__has_disposition('forced') or "FORCED" in self.title.upper()
+        if self.__has_disposition('forced'):
+            return True
+        if self.title and "FORCED" in self.title.upper():
+            return True
+        return False
     def is_hearing_impaired(self) -> bool:
-        return self.__has_disposition('hearing_impaired') or "SDH" in self.title.upper()
+        if self.__has_disposition('hearing_impaired'):
+            return True
+        if self.title and "SDH" in self.title.upper():
+            return True
+        return False
     def is_image_based_subtitle(self) -> bool:
         return self.is_subtitle() and self.raw.get('codec_name') in ['dvd_subtitle', 'dvb_subtitle', 'pgs_subtitle', 'hdmv_pgs_subtitle']
+
+    def has_embedded_subtitles(self) -> bool:
+        if self.closed_captions_type:
+            return True
+        return False
 
     def __str__(self) -> str:
         result = list()
@@ -195,6 +274,8 @@ class Stream:
             result.append("(forced)")
         if self.is_hearing_impaired():
             result.append("(hi)")
+        if self.closed_captions_type:
+            result.append("(Embedded subtitle bitstream: " + self.closed_captions_type + ")")
 
         return ' '.join(result)
 
@@ -207,7 +288,7 @@ class MediaFile:
     def __init__(self, path: str, format, streams: list[Stream]):
         self.path = path
         self.format = format
-        self.container = os.path.splitext(path)[1][1:]
+        self.container = Path(path).suffix[1:]
         self.streams = streams
     
     def get_video_streams(self) -> list[Stream]:
@@ -237,30 +318,35 @@ class MediaFile:
         return '\n'.join(result)
 
 def parse_mediafile(filepath: str) -> MediaFile:
-    cmd = ['ffprobe', '-hide_banner']
-    cmd.extend(['-analyzeduration', FFMPEG_ANALYZEDURATION, '-probesize', FFMPEG_PROBESIZE])
-    cmd.extend(['-of', 'json'])
-    cmd.extend(['-show_streams', '-show_format'])
-    cmd.extend([filepath])
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    ffprobe_result = CommandExecutor().execute(['ffprobe', '-hide_banner', '-of', 'json',
+           '-analyzeduration', FFMPEG_ANALYZEDURATION, '-probesize', FFMPEG_PROBESIZE,
+           '-show_streams', '-show_format',
+            # Display frame details but from the first frame only
+            '-show_frames','-read_intervals', '%+#1', 
+            filepath])
 
-    if result.returncode != 0:
-        print_error(result.stderr.decode(sys.stdout.encoding))
+    if ffprobe_result.returncode != 0:
+        print_error(ffprobe_result.stderr)
         fatal("Failed to parse file info from %s" % filepath)
 
-    ffprobe_output = result.stdout.decode(sys.stdout.encoding)
-    if ARGS.verbose:
-        print(ffprobe_output)
-    data=json.loads(ffprobe_output)
-    format = data['format']
-    streams = [Stream(stream_data) for stream_data in data['streams']]
+    ffprobe = json.loads(ffprobe_result.stdout)
+    
+    streams = [Stream(stream_metadata) for stream_metadata in ffprobe['streams']]
+
+    if 'frames' in ffprobe:
+        for frame in ffprobe['frames']:
+            if not 'stream_index' in frame:
+                continue
+            for stream in streams:
+                if stream.index == frame['stream_index']:
+                    stream.digest_frame(frame)
 
     # Validate indexes
     for i in range(len(streams)):
         if i != streams[i].index:
             fatal(f"The array index {i} does not match the stream index {streams[i].index}")
 
-    return MediaFile(filepath, format, streams)
+    return MediaFile(filepath, ffprobe['format'], streams)
 
 def parse_args() -> argparse.Namespace:
     argparser = argparse.ArgumentParser(prog='Mediautil', description='Multi-purpose media editing tool')
@@ -333,6 +419,8 @@ def extract_subtitles(input_file: MediaFile, destination_dir: str, subtitle_stre
 
 def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir: str) -> str:
     language_str = subtitle.language
+    if not language_str:
+        language_str = "unknown"
     if subtitle.is_hearing_impaired():
         language_str += ".sdh"
     if subtitle.is_forced():
@@ -341,7 +429,7 @@ def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir:
     output_base = f"{destination_dir}/{name}.{language_str}"
     output_file = f"{output_base}.srt"
     i = 0
-    while os.path.exists(output_file):
+    while Path(output_file).exists():
         i += 1
         output_file = f"{output_base}.{i}.srt"
     return output_file
@@ -385,7 +473,7 @@ def process_file(input_file_path: str) -> None:
         stream_index = int(ARGS.set_stream_language[0])
         new_language = ARGS.set_stream_language[1]
         if stream_index >= len(input_file.streams):
-            fatal(f"Stream index not found: {ARGS.stream_index}")
+            fatal(f"Stream index not found: {stream_index}")
         stream_to_modify = input_file.streams[stream_index]
         if stream_to_modify.language == new_language:
             print(f"WARNING: The specified stream already has '{new_language}' set as language: \n{stream_to_modify}")
@@ -445,11 +533,31 @@ def process_file(input_file_path: str) -> None:
                 executor.add_args(['-map', f'-0:{stream.index}'])
 
     if ARGS.delete_subs:
+        subtitles_detected = False
+
         if len(input_file.get_subtitle_streams()) > 0:
             num_actions += 1
+            subtitles_detected = True
             action_list.append(" * Will delete all subtitle streams")
             executor.add_arg('-sn')
-        else:
+        
+        if any(s.has_embedded_subtitles() for s in input_file.get_video_streams()):
+            # For H.264: remove_types=6 (SEI messages containing CC)
+            # For H.265: remove_types=39 (SEI messages containing CC)
+            for stream in input_file.get_video_streams():
+                if stream.has_embedded_subtitles():
+                    if stream.codec_name == 'h264':
+                        executor.add_args(['-bsf:v', 'filter_units=remove_types=6'])
+                    elif stream.codec_name == 'hevc':
+                        executor.add_args(['-bsf:v', 'filter_units=remove_types=39'])
+                    else:
+                        print_error(f"Embedded subtitle removal from {stream.codec_name} not implemented")
+                        break
+                    num_actions += 1
+                    subtitles_detected = True
+                    action_list.append(" * Will delete embedded EIA608 closed captions from video using bitstream filter")
+            
+        if not subtitles_detected:
             action_list.append(" * Requested deletion of all subtitle streams but none exists")
 
     if not action_list:
@@ -457,7 +565,8 @@ def process_file(input_file_path: str) -> None:
         return
     
     print("\nACTIONS:")
-    [print(action) for action in action_list]
+    for action in action_list:
+        print(action)
 
     option_list = []
     if ARGS.dry_run:     option_list.append(" * Dry-run mode, will not perform any actions")
@@ -478,16 +587,16 @@ def process_file(input_file_path: str) -> None:
 
     working_file = f"{working_dir}/{inputfilename_without_extension}.new.{output_container}"
     verbose(f"Working file    : {working_file}")
-    if os.path.exists(working_file):
+    if Path(working_file).exists():
         fatal(f"Working file already exists: {working_file}")
 
     output_file = f"{working_dir}/{inputfilename_without_extension}.{output_container}"
     verbose(f"Destination file: {output_file}")
 
-    if container_change and os.path.exists(output_file):
+    if container_change and Path(output_file).exists():
         fatal(f"Output file already exists: {output_file}")
 
-    if not os.path.exists(working_dir) and not ARGS.dry_run:
+    if not Path(working_dir).exists() and not ARGS.dry_run:
         verbose(f"Creating working dir: {working_dir}")
         os.makedirs(working_dir)
 
@@ -503,10 +612,10 @@ def process_file(input_file_path: str) -> None:
     
     print("Performing selected actions on source file")
     executor.add_arg(working_file)
-    returncode = executor.execute()
+    result = executor.execute()
 
-    if returncode != 0:
-        fatal(f"ffmpeg execution failed with exit code {returncode}")
+    if result.returncode != 0:
+        fatal(f"ffmpeg execution failed with exit code {result.returncode}")
 
     print("\nffmpeg execution successful")
 
@@ -523,7 +632,7 @@ def cleanup(inputfile: str, workingfile: str, outputfile: str) -> None:
         print(f"Modified file: {workingfile}")
         return
 
-    if not os.path.exists(workingfile):
+    if not Path(workingfile).exists():
         fatal(f"{workingfile} does not exist. Aborting cleanup")
 
     verbose(f"Deleting {inputfile}")
