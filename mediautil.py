@@ -41,6 +41,11 @@ def is_verbose() -> bool:
 def verbose(*args, **kwargs) -> None:
     if is_verbose():
         print(*args, file=sys.stderr, **kwargs)
+def is_debug() -> bool:
+    return ARGS.debug
+def debug(*args, **kwargs) -> None:
+    if is_debug():
+        print(*args, file=sys.stderr, **kwargs)
 
 def confirm() -> None:
     print()
@@ -69,13 +74,19 @@ class CommandExecutor:
     print_output: bool
 
     def __init__(self, print_output: bool = False) -> None:
-        if is_verbose():
+        if is_debug():
             print_output = True
         self.print_output = print_output
     
     def execute(self, args: list[str]) -> CommandExecutionResult:
         verbose(' '.join(args))
-        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True)
+        process = subprocess.Popen(args, 
+                                   stdout=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE, 
+                                   bufsize=1, 
+                                   encoding='utf-8',
+                                   errors='replace',
+                                   text=True)
 
         stdout_buffer = io.StringIO()
         stderr_buffer = io.StringIO()
@@ -367,6 +378,7 @@ def parse_args() -> argparse.Namespace:
 
     argparser.add_argument('-d', '--create-dir', action='store_true', help='Store the output in a directory with the same name as the input file')
     argparser.add_argument('-v', '--verbose', action='store_true', help='Verbose mode')
+    argparser.add_argument('--debug', action='store_true', help='Debug mode')
     argparser.add_argument('--dry-run', '--nono', action='store_true', help='Make no changes')
     argparser.add_argument('--no-confirm', dest='confirm', action='store_false', help='Disables confirmation dialog before executing')
     argparser.add_argument('--no-cleanup', dest='cleanup', action='store_false', help='Disables cleanup of old file')
@@ -378,6 +390,8 @@ def parse_args() -> argparse.Namespace:
     
     if args.dry_run:
         args.confirm = False
+    if args.debug:
+        args.verbose = True
 
     if args.delete_stream:
         if "," in args.delete_stream:
@@ -642,7 +656,7 @@ def cleanup(inputfile: str, workingfile: str, outputfile: str) -> None:
     os.replace(workingfile, outputfile)
 
 ARGS = parse_args()
-verbose('Arguments:\n  ' + '\n  '.join(f'{k}={v}' for k, v in vars(ARGS).items() if v != None) + "\n")
+debug('Arguments:\n  ' + '\n  '.join(f'{k}={v}' for k, v in vars(ARGS).items() if v != None) + "\n")
 
 if len(ARGS.files) > 1:
     print("Input files:")
