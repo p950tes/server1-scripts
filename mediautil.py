@@ -105,7 +105,7 @@ class CommandExecutor:
             stdout_reader.join(timeout=1.0)
             stderr_reader.join(timeout=1.0)
 
-        verbose("Return code: {process.returncode}")
+        verbose(f"Return code: {process.returncode}")
 
         return CommandExecutionResult(
             args=args,
