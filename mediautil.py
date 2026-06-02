@@ -67,8 +67,12 @@ class CommandExecutionResult:
     stderr: str = ""
     returncode: int|None = None
 
+    def get_command_as_string(self) -> str:
+        return ' '.join(self.args)
     def is_success(self) -> bool:
         return self.returncode == 0
+    def is_failed(self) -> bool:
+        return not self.is_success()
 
 class CommandExecutor:
     print_output: bool
@@ -100,6 +104,8 @@ class CommandExecutor:
         finally:
             stdout_reader.join(timeout=1.0)
             stderr_reader.join(timeout=1.0)
+
+        verbose("Return code: {process.returncode}")
 
         return CommandExecutionResult(
             args=args,
@@ -406,7 +412,7 @@ def parse_args() -> argparse.Namespace:
     
     return args
 
-def extract_subtitles(input_file: MediaFile, destination_dir: str, subtitle_streams: list[Stream] = []):
+def extract_subtitles(input_file: MediaFile, destination_dir: str, subtitle_streams: list[Stream] = []) -> None:
     if not subtitle_streams:
         subtitle_streams = input_file.get_subtitle_streams()
     if not subtitle_streams:
@@ -427,9 +433,10 @@ def extract_subtitles(input_file: MediaFile, destination_dir: str, subtitle_stre
         executor.add_args(['-map', f'0:{subtitle.index}'])
         executor.add_args(['-c', 'srt'])
         executor.add_arg(output_file)
-        exitcode = executor.execute()
-        if exitcode != 0:
-            print_error(f"Failed to extract subtitle: {subtitle}")
+        result = executor.execute()
+        if result.is_failed():
+            print_error(f"Failed to extract subtitle: {subtitle}. \nCommand: {result.get_command_as_string()}\nResponse code: {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+            raise RuntimeError(f"Failed to extract subtitle: {subtitle}")
 
 def resolve_new_subtitle_file_path(subtitle: Stream, name: str, destination_dir: str) -> str:
     language_str = subtitle.language
