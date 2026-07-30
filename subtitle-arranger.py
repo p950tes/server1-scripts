@@ -155,7 +155,7 @@ class FileResolver:
         results: List[Path] = []
         for pattern in patterns:
             results.extend(file for file in BASE_DIR.rglob(pattern) if file.is_file())
-        return results
+        return sorted(results)
 
 class SubtitleMatcher:
     def __init__(self, video_files: list[VideoFile]) -> None:
